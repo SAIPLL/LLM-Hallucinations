@@ -1,0 +1,12 @@
+*.csv
+error_analysis.ipynb
+Data/CoderEval/CoderEval-Input4Models/
+Data/CoderEval/experimental-results/
+Data/CoderEval/CoderEval-Input4Models.zip
+Data/CoderEval/CoderEval.tar
+Data/CoderEval/CoderEval4Java.json
+Data/CoderEval/CoderEval4Python.json
+Data/Own/
+Data/odex/
+Data/Prompts/
+Models/
