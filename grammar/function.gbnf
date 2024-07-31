@@ -1,0 +1,60 @@
+root ::= "```" singleLineComment* importstmt+ statement+ endmarker "```"
+importstmt ::= (importname | importfrom) newline
+importname ::= "import " dottedasnames
+
+# note below: the ('.' | '...') is necessary because '...' is tokenized as ELLIPSIS
+importfrom ::= ( "from " ( ("." | "...")* dottedname | ("." | "...")+ ) " import " ( "*" | "(" importasnames ")" | importasnames ) )
+importasname ::= name (" as " name)?
+dottedasname ::= dottedname (" as " name)?
+importasnames ::= importasname (", " importasname)* (", ")?
+dottedasnames ::= dottedasname (", " dottedasname)*
+dottedname ::= name ("." name)*
+
+statement ::=
+    ( singleLineComment* name space "=" space expression singleLineComment* newline) |
+    ( singleLineComment* name "(" arglist? ")" singleLineComment* newline)
+
+expression ::= term ( ( "+" | "-" ) term)*
+term ::= factor ( ( "*" | "@" | "/" | "%" | "//" ) factor)*
+factor ::= ( "+" | "-" | "~" ) factor | power
+power ::= atomexpr ("**" factor)?
+atomexpr ::= atom (trailer)*
+atom ::=
+    ( "(" space (testlistcomp)? space ")" ) |
+    ( "[" space (testlistcomp)? space "]" ) |
+    ( "{" space (dictorsetmaker)? space  "}" ) |
+    value |
+    name
+
+testlistcomp ::= namedexprtest "," (namedexprtest)* (",")?
+# Change name to lib to indicate library logic if matched
+trailer ::= "." lib | "(" (arglist)? ")" | "[" subscriptlist "]"
+subscriptlist ::= subscript ("," subscript)* (",")?
+subscript ::= test | (test)? ":" (test)? (sliceop)?
+sliceop ::= ":" (test)?
+dictorsetmaker ::= 
+       ( ((test ":" test | "**" expression) ("," (test ":" test | "**" expression))* (",")?) |
+       ( test "," (test)* (",")?) )
+
+namedexprtest ::= test (":= " test)?
+test ::= expression (compop expression)*
+compop ::= ( "<" | ">" | "==" | ">=" | "<=" | "<>" | "!=" | " in " | " not in " | " is " | " is not " )
+
+classdef ::= "class " name ("(" space? (arglist)? space? ")")? ":" suite
+
+suite ::= newline indent statement
+
+arglist ::= argument ("," argument)*  (",")?
+argument ::= atomexpr | atomexpr "=" atomexpr
+
+# Adds library logic
+lib ::= libmethods
+
+endmarker ::= ""
+indent ::= "\t"
+newline ::= "\n"
+name ::= [a-zA-Z_] [a-zA-Z_0-9]*
+ws ::= ([ \t\n]+)
+singleLineComment ::= "#" [^\n]* "\n"
+unknown ::= value
+kwargs ::= testlistcomp

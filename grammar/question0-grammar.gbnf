@@ -1,0 +1,91 @@
+root ::= "```" importstmt+ statement+ endmarker "```"
+importstmt ::= (importname | importfrom) newline
+importname ::= "import " dottedasnames
+
+# note below: the ('.' | '...') is necessary because '...' is tokenized as ELLIPSIS
+importfrom ::= ( "from " ( ("." | "...")* dottedname | ("." | "...")+ ) " import " ( "*" | "(" importasnames ")" | importasnames ) )
+importasname ::= name (" as " name)?
+dottedasname ::= dottedname (" as " name)?
+importasnames ::= importasname (", " importasname)* (", ")?
+dottedasnames ::= dottedasname (", " dottedasname)*
+dottedname ::= name ("." name)*
+
+statement ::=
+    ( name space "=" space expression newline) |
+    ( name "(" arglist? ")" newline)
+
+expression ::= term ( ( "+" | "-" ) term)*
+term ::= factor ( ( "*" | "@" | "/" | "%" | "//" ) factor)*
+factor ::= ( "+" | "-" | "~" ) factor | power
+power ::= atomexpr ("**" factor)?
+atomexpr ::= atom (trailer)*
+atom ::=
+    ( "(" space (testlistcomp)? space ")" ) |
+    ( "[" space (testlistcomp)? space "]" ) |
+    ( "{" space (dictorsetmaker)? space  "}" ) |
+    value |
+    name
+
+testlistcomp ::= namedexprtest "," (namedexprtest)* (",")?
+# Change name to lib to indicate library logic if matched
+trailer ::= "." lib | "(" (arglist)? ")" | "[" subscriptlist "]"
+subscriptlist ::= subscript ("," subscript)* (",")?
+subscript ::= test | (test)? ":" (test)? (sliceop)?
+sliceop ::= ":" (test)?
+dictorsetmaker ::= 
+       ( ((test ":" test | "**" expression) ("," (test ":" test | "**" expression))* (",")?) |
+       ( test "," (test)* (",")?) )
+
+namedexprtest ::= test (":= " test)?
+test ::= expression (compop expression)*
+compop ::= ( "<" | ">" | "==" | ">=" | "<=" | "<>" | "!=" | " in " | " not in " | " is " | " is not " )
+
+classdef ::= "class " name ("(" space? (arglist)? space? ")")? ":" suite
+
+suite ::= newline indent statement
+
+arglist ::= argument ("," argument)*  (",")?
+argument ::= atomexpr | atomexpr "=" atomexpr
+
+# Adds library logic
+lib ::= (libmethods | name)
+
+endmarker ::= ""
+indent ::= "\t"
+newline ::= "\n"
+name ::= [a-zA-Z_] [a-zA-Z_0-9]*
+ws ::= ([ \t\n]+)
+Axes ::= "[" space ( value ("," space value)* )? "]" space
+DataFrame ::= "DataFrame" "("  (DataFrame-data-kv DataFrame-data-rest | DataFrame-index-kv DataFrame-index-rest | DataFrame-columns-kv DataFrame-columns-rest | DataFrame-dtype-kv DataFrame-dtype-rest | DataFrame-copy-kv )? ")" ( "." ( DataFrame-add-prefix | DataFrame-attrs ) )?
+DataFrame-add-prefix ::= add-prefix
+DataFrame-attrs ::= "data" | "index" | "columns" | "dtype" | "copy"
+DataFrame-columns-kv ::= ("columns" space "=" space)? (Dtype | atomexpr)
+DataFrame-columns-rest ::= ( "," space DataFrame-dtype-kv )? DataFrame-dtype-rest
+DataFrame-copy-kv ::= ("copy" space "=" space)? (unknown | atomexpr)
+DataFrame-data-kv ::= ("data" space "=" space)? (Axes | atomexpr)
+DataFrame-data-rest ::= ( "," space DataFrame-index-kv )? DataFrame-index-rest
+DataFrame-dtype-kv ::= ("dtype" space "=" space)? (bool | atomexpr)
+DataFrame-dtype-rest ::= ( "," space DataFrame-copy-kv )?
+DataFrame-index-kv ::= ("index" space "=" space)? (Axes | atomexpr)
+DataFrame-index-rest ::= ( "," space DataFrame-columns-kv )? DataFrame-columns-rest
+Dtype ::= "[" space ( string ("," space string)* )? "]" space
+add-prefix ::= "add_prefix" "(" add-prefix-prefix-kv ( "," space ( add-prefix-axis-kv ) )? ")"
+add-prefix-attrs ::= "prefix" | "axis"
+add-prefix-axis ::= "\"0\"" | "\"'index'\"" | "\"1\"" | "\"'columns'\"" | "\"None\""
+add-prefix-axis-kv ::= ("axis" space "=" space)? (add-prefix-axis | atomexpr)
+add-prefix-prefix-kv ::= ("prefix" space "=" space)? (str | atomexpr)
+array ::= "[" space ( value ("," space value)* )? "]" space
+bool ::= ("True" | "False") space
+boolean ::= ("True" | "False") space
+char ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+decimal-part ::= [0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integral-part ::= [0-9] | [1-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+libmethods ::= add-prefix | DataFrame
+null ::= "null" space
+number ::= ("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space
+object ::= "{" space ( string ":" space value ("," space string ":" space value)* )? "}" space
+space ::= " "?
+str ::= "\"" char* "\"" space
+string ::= "\"" char* "\"" space
+unknown ::= "\"" char* "\"" space
+value ::= object | array | string | number | boolean | null

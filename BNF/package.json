@@ -1,0 +1,12 @@
+{
+  "type": "module",
+  "name": "bnf",
+  "version": "1.0.0",
+  "main": "test.js",
+  "scripts": {
+    "start": "node test.js"
+  },
+  "dependencies": {
+    "gbnf": "^1.0.0"
+  }
+}

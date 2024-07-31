@@ -1,0 +1,187 @@
+root ::= singleinput | fileinput | evalinput
+
+singleinput ::= newline | simplestmt | compoundstmt newline
+fileinput ::= (newline | stmt)* endmarker
+evalinput ::= testlist newline* endmarker
+
+decorator ::= "@" dottedname ( "(" [arglist] ")" )? newline
+decorators ::= decorator+
+decorated ::= decorators ( classdef | funcdef | asyncfuncdef )
+
+asyncfuncdef ::= async funcdef
+funcdef ::= "def " name parameters ( "->" test )? ":" (typecomment)? funcbodysuite
+
+parameters ::= "(" (typedargslist)? ")"
+
+typedargslist ::= 
+	( tfpdef ("," test)? ("," (typecomment)? tfpdef ("," test)?)* "," (typecomment)? "/" ("," ( (typecomment)? tfpdef ("," test)? (
+	        "," (typecomment)? tfpdef ("," test)?)* (typecomment | ("," (typecomment)? (
+	        "*" (tfpdef)? ("," (typecomment)? tfpdef ("," test)?)* (typecomment | ("," (typecomment)? ("**" tfpdef (",")? (typecomment)?)?)?) | 
+	        "**" tfpdef (",")? (typecomment)?)?)?) | 
+	        "*" (tfpdef)? ("," (typecomment)? tfpdef ("," test)?)* (typecomment | ("," (typecomment)? ("**" tfpdef (",")? (typecomment)?)?)?) | 
+	        "**" tfpdef (",")? (typecomment)?)?)? ) |
+	( tfpdef ("," test)? ("," (typecomment)? tfpdef ("," test)?)* (typecomment | ("," (typecomment)? (
+	   "*" (tfpdef)? ("," (typecomment)? tfpdef ("," test)?)* (typecomment | ("," (typecomment)? ("**" tfpdef (",")? (typecomment)?)?)?) |
+	   "**" tfpdef (",")? (typecomment)?)?)?) | 
+	   "*" (tfpdef)? ("," (typecomment)? tfpdef ("," test)?)* (typecomment | ("," (typecomment)? ("**" tfpdef (",")? (typecomment)?)?)?) | 
+	   "**" tfpdef (",")? (typecomment)? )
+
+
+tfpdef ::= name ( ":" test )?
+
+varargslist ::= 
+   ( vfpdef ("=" test )?("," vfpdef ("=" test)?)* "," "/" ("," ( (vfpdef ("=" test)? ("," vfpdef ("=" test)?)* ("," (
+        "*" (vfpdef)? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef (",")?)?)? | "**" vfpdef (",")?)?)? | 
+        "*" (vfpdef)? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef (",")?)?)? | "**" vfpdef (",")?) )?)? ) | 
+   ( vfpdef ("=" test)? ("," vfpdef ("=" test)?)* ("," ("*" (vfpdef)? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef (",")?)?)? | 
+   "**" vfpdef (",")?)?)? ) | 
+   ( "*" (vfpdef)? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef (",")?)?)? ) | 
+   ( "**" vfpdef (",")? )
+
+vfpdef ::= name
+
+stmt ::= simplestmt | compoundstmt
+simplestmt ::= smallstmt ( ";" smallstmt )* (";")? newline
+smallstmt ::= ( exprstmt | delstmt | passstmt | flowstmt | importstmt | globalstmt | nonlocalstmt | assertstmt )
+exprstmt ::= testliststarexpr ( annassign | augassign ( yieldexpr|testlist ) | (("=" ( yieldexpr | testliststarexpr ))+ (typecomment)?)? )
+annassign ::= ":" test ( "=" (yieldexpr|testliststarexpr) )?
+testliststarexpr ::= ( test|starexpr ) ("," ( test | starexpr ))* (",")?
+augassign ::= ( "+=" | "-=" | "*=" | "@=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" | "**=" | "//=" )
+
+# For normal and annotated assignments, additional restrictions enforced by the interpreter
+delstmt ::= "del " exprlist
+passstmt ::= "pass"
+flowstmt ::= breakstmt | continuestmt | returnstmt | raisestmt | yieldstmt
+breakstmt ::= "break"
+continuestmt ::= "continue"
+returnstmt ::= "return" (testliststarexpr)?
+yieldstmt ::= yieldexpr
+raisestmt ::= "raise " (test ("from " test)?)?
+importstmt ::= importname | importfrom
+importname ::= "import " dottedasnames
+
+# note below: the ('.' | '...') is necessary because '...' is tokenized as ELLIPSIS
+importfrom ::= ( "from " ( ("." | "...")* dottedname | ("." | "...")+ ) " import " ( "*" | "(" importasnames ")" | importasnames ) )
+importasname ::= name (" as " name)?
+dottedasname ::= dottedname (" as " name)?
+importasnames ::= importasname (", " importasname)* (", ")?
+dottedasnames ::= dottedasname (", " dottedasname)*
+dottedname ::= name ("." name)*
+globalstmt ::= "global " name ("," name)*
+nonlocalstmt ::= "nonlocal " name ("," name)*
+assertstmt ::= "assert " test ("," test)?
+
+compoundstmt ::= ifstmt | whilestmt | forstmt | trystmt | withstmt | funcdef | classdef | decorated | asyncstmt
+asyncstmt ::= async (funcdef | withstmt | forstmt)
+ifstmt ::= " if " namedexprtest ":" suite ("elif " namedexprtest ":" suite)* ("else" ":" suite)?
+whilestmt ::= "while " namedexprtest ":" suite ("else" ":" suite)?
+forstmt ::= "for " exprlist " in " testlist ":" (typecomment)? suite ("else" ":" suite)?
+trystmt ::= ("try" ":" suite
+           ((exceptclause ":" suite)+
+            ("else" ":" suite)?
+            ("finally" ":" suite)? |
+           "finally" ":" suite))
+withstmt ::= "with " withitem ("," withitem)*  ":" (typecomment)? suite
+withitem ::= test (" as " expr)?
+# NB compile.c makes sure that the default except clause is last
+exceptclause ::= "except " (test (" as " name)?)?
+suite ::= simplestmt | newline indent stmt+
+
+namedexprtest ::= test (":= " test)?
+test ::= ortest (" if " ortest "else " test)? | lambdef
+testnocond ::= ortest | lambdefnocond
+lambdef ::= "lambda " (varargslist)? ": " test
+lambdefnocond ::= "lambda " (varargslist)? "::= " testnocond
+ortest ::= andtest ("or " andtest)*
+andtest ::= nottest ("and " nottest)*
+nottest ::= " not " nottest | comparison
+comparison ::= expr ws? (compop  ws? expr)*
+# <> isn"t actually a valid comparison operator in Python. It"s here for the
+# sake of a __future__ import described in PEP 401 (which really works  :-)
+compop ::= ( "<" | ">" | "==" | ">=" | "<=" | "<>" | "!=" | " in " | " not in " | " is " | " is not " )
+starexpr ::= "*" expr
+expr ::= xorexpr ("|" xorexpr)*
+xorexpr ::= andexpr ("^" andexpr)*
+andexpr ::= shiftexpr ("&" shiftexpr)*
+shiftexpr ::= arithexpr ( ( "<<" | ">>" ) arithexpr)*
+arithexpr ::= term ( ws? ( "+" | "-" ) ws? term)*
+term ::= factor ( ws? ( "*" | "@" | "/" | "%" | "//" ) ws? factor)*
+factor ::= ( "+" | "-" | "~" ) ws? factor | power
+power ::= atomexpr ("**" ws? factor)?
+atomexpr ::= ("await ")? atom (trailer)*
+atom ::= 
+	( "(" ws? (yieldexpr|testlistcomp)? ws? ")" ) |
+    ( "[" ws? (testlistcomp)? ws? "]" ) |
+    ( "{" ws? (dictorsetmaker)? ws? "}" ) |
+    ( name | number | string+ | "..." | "None" | "True" | "False" )
+testlistcomp ::= (namedexprtest|starexpr) ( compfor | ("," (namedexprtest|starexpr))* (",")? )
+trailer ::= "(" (arglist)? ")" | "[" subscriptlist "]" | "." name
+subscriptlist ::= subscript ("," subscript)* (",")?
+subscript ::= test | (test)? ":" (test)? (sliceop)?
+sliceop ::= ":" (test)?
+exprlist ::= (expr|starexpr) ("," (expr|starexpr))* (",")?
+testlist ::= test ("," test)* (",")?
+dictorsetmaker ::= 
+       ( ((test ":" test | "**" expr) (compfor | ("," (test ":" test | "**" expr))* (",")?)) |
+       ((test | starexpr) (compfor | ("," (test | starexpr))* (",")?)) )
+
+classdef ::= "class " name ("(" ws? (arglist)? ws? ")")? ":" suite
+
+arglist ::= argument ("," argument)*  (",")?
+
+# The reason that keywords are test nodes instead of NAME is that using NAME
+# results in an ambiguity. ast.c makes sure its a NAME.
+# "test '=' test" is really "keyword '=' test", but we have no such token.
+# These need to be in a single rule to avoid grammar that is ambiguous
+# to our LL(1) parser. Even though 'test' includes '*expr' in starexpr,
+# we explicitly match '*' here, too, to give it proper precedence.
+# Illegal combinations and orderings are blocked in ast.c:
+# multiple (test compfor) arguments are blocked; keyword unpackings
+# that precede iterable unpackings are blocked; etc.
+argument ::= ( test (compfor)? | test ":=" test | test "=" test | "**" test | "*" test )
+
+compiter ::= compfor | compif
+synccompfor ::= "for " exprlist " in " ortest (compiter)?
+compfor ::= (async)? synccompfor
+compif ::= "if " testnocond (compiter)?
+
+# not used in grammar, but may appear in "node" passed from Parser to Compiler
+encodingdecl ::= name
+
+yieldexpr ::= "yield " (yieldarg)?
+yieldarg ::= "from " test | testliststarexpr
+
+# the TYPECOMMENT in suites is only parsed for funcdefs,
+# but cant go elsewhere due to ambiguity
+funcbodysuite ::= simplestmt | newline (typecomment newline)? indent stmt+
+
+functypeinput ::= functype newline* endmarker
+functype ::= "(" (typelist)? ")" "->" test
+# typelist is a modified typedargslist (see above)
+typelist ::= ( test ("," test)* ("," ("*" (test)? ("," test)* ("," "**" test)? | "**" test)? )? | "*" (test)? ("," test)* ("," "**" test)? | "**" test )
+
+newline ::= "\n"
+# There is not EOF on Unicode
+endmarker ::= ""
+async ::= "async"
+name ::= ([a-zA-Z_])+ ([a-zA-Z_0-9])*
+typecomment ::= "# " [^\n]*
+indent ::= ( "    " | "\t" )
+number ::= ([0-9])+ ( ["."] ([0-9])+ )?
+string ::= (" " " [^\n]* " " ") | (" ' " [^\n]* " ' ")
+ws ::= " "
+
+# ws ::= ([ \t\n])+
+# hexnumber ::= 0([xX])?(?:_?([0-9a-fA-F])?)+
+# binnumber ::= 0([bB])?(?:_?([01])?)+
+# octnumber ::= 0([oO])?(?:_?([0-7])?)+
+# decnumber ::= (?:0(?:_?0)*|([1-9])?(?:_?([0-9])?)*)
+# intnumber ::= hexnumber | binnumber | octnumber | decnumber
+# exponent ::= [eE][-+]?[0-9](?:_?[0-9])*
+# pointfloat ::= ([0-9](?:_?[0-9])*\.(?:[0-9](?:_?[0-9])*)?|\.[0-9](?:_?[0-9])*) exponent?
+# expfloat ::= ( [0-9](?:_?[0-9])* exponent )
+# floatnumber ::= poinfloat | expfloat
+# imagnumber ::= [0-9](?:_?[0-9])*[jJ] | ( floatnumber [jJ] )
+# number ::= imagnumber | floatnumber | intnumber
+# number ::= ( ("-")? ([0-9] | [1-9] [0-9]{0,15}))? ("." [0-9]+)? ([eE] [-+]? [1-9] [0-9]{0,15})?
+# string ::= ('([^'\\]|\\.)*'|\"([^\"\\]|\\.)*\")
