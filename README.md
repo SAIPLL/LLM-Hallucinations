@@ -36,7 +36,7 @@ I have included a call to the Anthropic API through this script ```Data/DS-1000/
 I have included a call to the Ollama API (running locally) through this script ```Data/DS-1000/run_ollama.py```.
 
 ```
-cd Data/DS-1000
+cd DS-1000
 python run_ollama.py
 ```
 
