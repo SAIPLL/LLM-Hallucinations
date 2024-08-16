@@ -23,12 +23,11 @@ atom ::=
     ( "(" space (testlistcomp)? space ")" ) |
     ( "[" space (testlistcomp)? space "]" ) |
     ( "{" space (dictorsetmaker)? space  "}" ) |
-    value |
-    name
+    value
 
 testlistcomp ::= namedexprtest "," (namedexprtest)* (",")?
 # Change name to lib to indicate library logic if matched
-trailer ::= "." lib | "(" (arglist)? ")" | "[" subscriptlist "]"
+trailer ::= library | "." methods | "(" (arglist)? ")" | "[" subscriptlist "]"
 subscriptlist ::= subscript ("," subscript)* (",")?
 subscript ::= test | (test)? ":" (test)? (sliceop)?
 sliceop ::= ":" (test)?
@@ -47,9 +46,6 @@ suite ::= newline indent statement
 arglist ::= argument ("," argument)*  (",")?
 argument ::= atomexpr | atomexpr "=" atomexpr
 
-# Adds library logic
-lib ::= libmethods
-
 endmarker ::= ""
 indent ::= "\t"
 newline ::= "\n"
@@ -58,3 +54,18 @@ ws ::= ([ \t\n]+)
 singleLineComment ::= "#" [^\n]* "\n"
 unknown ::= value
 kwargs ::= testlistcomp
+array ::= "[" space ( value ("," space value)* )? "]" space
+bool ::= ("True" | "False") space
+char ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+decimal-part ::= [0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integral-part ::= [0-9] | [1-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integer ::= ("-"? integral-part) space
+null ::= "null" space
+none ::= "None" space
+number ::= ("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space
+object ::= "{" space ( string ":" space value ("," space string ":" space value)* )? "}" space
+space ::= " "?
+string ::= "\"" char* "\"" space
+value ::= object | array | string | number | bool | null | none
+
+# Adds library logic

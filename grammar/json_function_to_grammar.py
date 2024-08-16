@@ -83,6 +83,7 @@ PRIMITIVE_RULES = {
     'name'         : BuiltinRule('([a-zA-Z_])+ ([a-zA-Z_0-9])*', []),
     'kwargs'       : BuiltinRule('arglist', []),
     'unknown'      : BuiltinRule('value', []),
+    'endmarker'      : BuiltinRule('""', []),
 }
 
 # TODO: support "uri", "email" string formats
@@ -110,7 +111,7 @@ ESCAPED_IN_REGEXPS_BUT_NOT_IN_LITERALS = set('[]()|{}*+?')
 
 
 class SchemaConverter:
-    def __init__(self, *, prop_order, allow_fetch, dotall, raw_pattern):
+    def __init__(self, *, prop_order, allow_fetch, dotall, raw_pattern, alias, name):
         self._prop_order = prop_order
         self._allow_fetch = allow_fetch
         self._dotall = dotall
@@ -120,7 +121,8 @@ class SchemaConverter:
         }
         self._refs = {}
         self._refs_being_resolved = set()
-        self.name = ''
+        self.name = name
+        self.alias = alias
 
     def _format_literal(self, literal):
         escaped = GRAMMAR_LITERAL_ESCAPE_RE.sub(
@@ -376,7 +378,7 @@ class SchemaConverter:
 
 
     def _resolve_ref(self, ref):
-        ref_name = ref.split('/')[-1]
+        ref_name = self.alias + '-' + ref.split('/')[-1]
         if ref_name not in self._rules and ref not in self._refs_being_resolved:
             self._refs_being_resolved.add(ref)
             resolved = self._refs[ref]
@@ -391,6 +393,7 @@ class SchemaConverter:
         schema_type = schema.get('type')
         schema_format = schema.get('format')
         rule_name = name + '-' if name in RESERVED_NAMES else name or 'root'
+        rule_name = self.alias + '-' + rule_name
 
         if (ref := schema.get('$ref')) is not None:
             return self._add_rule(rule_name, self._resolve_ref(ref))
@@ -399,13 +402,14 @@ class SchemaConverter:
             return self._add_rule(rule_name, self._generate_union_rule(name, schema.get('oneOf') or schema['anyOf']))
 
         elif isinstance(schema_type, list):
-            return self._add_rule(rule_name, self._generate_union_rule(name, [{'type': t} for t in schema_type]))
-
+            rule = ' | '.join(t for t in schema_type)
+            return self._add_rule(rule_name, rule)
         elif 'const' in schema:
             return self._add_rule(rule_name, self._generate_constant_rule(schema['const']))
 
         elif 'enum' in schema:
-            rule = ' | '.join((self._generate_constant_rule(v) for v in schema['enum']))
+            enum_arr = schema['enum'] + [""]
+            rule = ' | '.join(self._generate_constant_rule(v) for v in enum_arr)
             return self._add_rule(rule_name, rule)
 
         elif schema_type in (None, 'object') and \
@@ -415,13 +419,15 @@ class SchemaConverter:
             name = schema.get('title')
             # if name its init, change to return type
             if name == "__init__":
-                name = schema.get('return').split('.')[-1]
-                rule_name = name
+                name = schema.get('return').split('.')[-1].replace('_','-')
+                rule_name = self.alias + '-' + name
             else:
-                rule_name = name
+                parent_rule = schema.get('biggerRule').split('.')[-1].replace('_','-')
+                rule_name = self.alias + '-' + parent_rule + '-' + name
             required = set(schema.get('required', []))
             properties = list(schema.get('properties', {}).items())
-            return self._add_rule(rule_name, self._build_object_rule(properties, required, name, schema.get('additionalProperties')))
+            lower_name = rule_name.lower()
+            return self._add_rule(lower_name, self._build_object_rule(properties, required, rule_name, schema.get('additionalProperties'), name))
 
         elif schema_type in (None, 'object') and 'allOf' in schema:
             required = set()
@@ -500,126 +506,173 @@ class SchemaConverter:
                 self._add_primitive(dep, dep_rule)
         return n
 
-    def _build_object_rule(self, properties: List[Tuple[str, Any]], required: Set[str], name: str, additional_properties: Union[bool, Any]):
+    def _build_object_rule(self, properties: List[Tuple[str, Any]], required: Set[str], name: str, additional_properties: Union[bool, Any], rule_name: str):
         prop_order = self._prop_order
         # sort by position in prop_order (if specified) then by original order
         sorted_props = [kv[0] for _, kv in sorted(enumerate(properties), key=lambda ikv: (prop_order.get(ikv[1][0], len(prop_order)), ikv[0]))]
-        elements_with_ref = [name for name, attrs in properties if '$ref' in attrs]
+        elements_with_ref = [ref_name for ref_name, attrs in properties if '$ref' in attrs]
+        props_without_refs = [ref_name for ref_name, attrs in properties if '$ref' not in attrs]
+        elements_with_ref.append("\n")
+        props_without_refs.append("\n")
+        real_name = rule_name
+        name = name.lower()
+        rule_name = rule_name.lower()
+
+        if len(properties) == 0:
+            rule = f"\"{rule_name}\" \"(\" "
+            rule += ' ")"'
+            return rule
+
+        methods = [f"{name}-{e}" for e in elements_with_ref] + [name, "\n"]
         
+        # Add rule for attributes of the object
+        attrs_name = self.alias + '-' + rule_name
+        if attrs_name == name:
+            if len(props_without_refs) > 1:
+                rule_attributes = self._add_rule(
+                    f'{name}-attrs', 
+                    ' | '.join(json.dumps(prop) for prop in props_without_refs)
+                )
+
         prop_kv_rule_names = {}
         for prop_name, prop_schema in properties:
-            prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{prop_name}')
+            if real_name != self.name:
+                prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{self.name}-{prop_name}')
+            else:
+                prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{prop_name}')
             if prop_name not in elements_with_ref:
                 prop_kv_rule_names[prop_name] = self._add_rule(
                     f'{name}{"-" if name else ""}{prop_name}-kv',
-                    f'({json.dumps(prop_name)} space "=" space)? ({prop_rule_name} | atomexpr)'
+                    f'({json.dumps(prop_name)} space "=" space)? ({prop_rule_name} | atomexpr | name )'
                 )
         required_props = [k for k in sorted_props if k in required]
         optional_props = [k for k in sorted_props if k not in required and k not in elements_with_ref]
-        props_without_refs = required_props + optional_props
-        methods = elements_with_ref + [name]
 
-        # Add rule for attributes of the object
-        rule_attributes = self._add_rule(
-            f'{name}-attrs', 
-            ' | '.join(json.dumps(prop) for prop in props_without_refs)
-            )
-
-        # Add libmethods, rule to constraint the relationship with these attributes
-        rule_methods = self._add_rule(
-            f'libmethods', 
-            ' | '.join(prop_name.replace('_', '-') for prop_name in methods)
-            )
 
         if additional_properties == True or isinstance(additional_properties, dict):
             sub_name = f'{name}{"-" if name else ""}additional'
             value_rule = self.visit({} if additional_properties == True else additional_properties, f'{sub_name}-value')
             prop_kv_rule_names["*"] = self._add_rule(
                 f'{sub_name}-kv',
-                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | atomexpr )'
+                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | atomexpr | name )'
             )
             optional_props.append("*")
 
-        rule = f"\"{name}\" \"(\" "
-        #something = '"{" space '
-        rule += ' "," space '.join(prop_kv_rule_names[k] for k in required_props)
+        if real_name != self.name:
+            rule = f"\"{real_name}\" \"(\" "
+            rule += ' "," space '.join(prop_kv_rule_names[k] for k in required_props if k in prop_kv_rule_names)
 
-        if optional_props:
-            rule += ' ('
-            if required_props:
-                rule += ' "," space ( '
+            if optional_props:
+                rule += ' ('
+                if required_props:
+                    rule += ' "," space ( '
 
-            def get_recursive_refs(ks, first_is_optional):
-                [k, *rest] = ks
-                kv_rule_name = prop_kv_rule_names[k]
-                if k == '*':
-                    res = self._add_rule(
-                        f'{name}{"-" if name else ""}additional-kvs',
-                        f'{kv_rule_name} ( "," space ' + kv_rule_name + ' )*'
-                    )
-                elif first_is_optional:
-                    res = f'( "," space {kv_rule_name} )?'
-                else:
-                    res = kv_rule_name
-                if len(rest) > 0:
-                    res += ' ' + self._add_rule(
-                        f'{name}{"-" if name else ""}{k}-rest',
-                        get_recursive_refs(rest, first_is_optional=True)
-                    )
-                return res
+                def get_recursive_refs(ks, first_is_optional):
+                    [k, *rest] = ks
+                    kv_rule_name = prop_kv_rule_names[k]
+                    if k == '*':
+                        res = self._add_rule(
+                            f'{name}{"-" if name else ""}additional-kvs',
+                            f'{kv_rule_name} ( "," space ' + kv_rule_name + ' )*'
+                        )
+                    elif first_is_optional:
+                        res = f'( "," space {kv_rule_name} )?'
+                    else:
+                        res = kv_rule_name
+                    if len(rest) > 0:
+                        res += ' ' + self._add_rule(
+                            f'{name}{"-" if name else ""}{k}-rest',
+                            get_recursive_refs(rest, first_is_optional=True)
+                        )
+                    return res
 
-            rule += ' | '.join(
-                get_recursive_refs(optional_props[i:], first_is_optional=False)
-                for i in range(len(optional_props))
-            )
-            if required_props:
-                rule += ' )'
-            rule += ' )?'
-
+                rule += ' | '.join(
+                    get_recursive_refs(optional_props[i:], first_is_optional=False)
+                    for i in range(len(optional_props))
+                )
+                if required_props:
+                    rule += ' )'
+                
+                rule += ' )?'
+            
             rule += ' ")"'
 
-            # Add optional trailer, this means attributes and methods
-            if elements_with_ref:
+        # Add optional trailer, this means attributes and methods
+        if elements_with_ref[0] != "\n" or props_without_refs[0] != "\n":
+            if real_name != self.name:
                 rule += ' ( "." ( '
+            else:
+                rule = '( ('
 
-                rule += ' | '.join( f"{name}-{elements_with_ref[i].replace('_','-')}"
-                    for i in range(len(elements_with_ref))
+            rule += ' | '.join( f"{name}-{elements_with_ref[i].replace('_','-').lower()}"
+                for i in range(0,len(elements_with_ref)-1)
+            )
+
+            rule_library = self._add_rule(
+                f'libmethods', name
+            )
+
+            rule_methods = self._add_rule(
+                f'lib',
+                f' | '.join( f"{name}-{elements_with_ref[i].replace('_','-').lower()}"
+                   for i in range(0, len(elements_with_ref)-1)
                 )
+            )
 
-                rule += f' | {name}-attrs ) )?'
+            if attrs_name == name and len(props_without_refs) > 1:
+                if elements_with_ref[0] != "\n":
+                    rule += f' | '
+                rule += f'{name}-attrs ) )?'
+            else:
+                rule += f' ) )?'
 
         return rule
 
     def format_grammar(self):
-        return '\n'.join(
-            f'{name} ::= {rule}'
-            for name, rule in sorted(self._rules.items(), key=lambda kv: kv[0])
-        )
+        val = ""
+        for name, rule in sorted(self._rules.items(), key=lambda kv: kv[0]):
+            if ''.join(name.split('-')) != ''.join(rule.replace("_","-").split('-')):
+                if not (len(rule.split(' ')) == 1 and rule not in PRIMITIVE_RULES.keys()):
+                    if rule.endswith("| \n"):
+                        rule = rule[0:-4]
+                    if rule.endswith(' | \"\\n\"'):
+                        rule = rule[0:-7]
+                    if rule.endswith('\"\"'):
+                        rule = rule[0:-9]
+                    val += f'{name} ::= {rule}\n'
+        return val
+
 
     def merge_converter(self, schema):
         for key, value in schema._rules.items():
+            # Append libmethods
             if key in self._rules:
-                # If the key exists in both dictionaries, keep the one with the longer string length
-                if len(value) > len(self._rules[key]):
-                    self._rules[key] = value
+                if value != "":
+                    if key == 'libmethods' or key == 'lib':
+                        self._rules[key] = self._rules[key] + ' | ' + value.replace('_', '-')
             else:
-                # If the key does not exist in the merged dictionary, add it
-                self._rules[key] = value
-        # Update/validate rule of merged values
-        if 'value' in schema._rules and 'value' in self._rules:
-            value_one = set(self._rules['value'].split('|'))
-            value_two = set(schema._rules['value'].split('|'))
-            self._rules['value'] = ( 
-            ' | '.join(prop_name for prop_name in value_one.union(value_two))
-            )
+                if value != "":
+                    # If the key does not exist in the merged dictionary, add it
+                    if key == 'libmethods' or key == 'lib':
+                        self._rules[key] = value.replace('_', '-')
+                    else:
+                        self._rules[key] = value
+    
+    def format_lib(self, alias):
+        # Modify libmethods to work with alias of library
+        self._rules[f"{alias}-lib-builders"] = f"\"{alias}.\" ( {self._rules['libmethods']} )"
+        self._rules[f"{alias}-lib-methods"] = self._rules['lib']
+        self._add_rule("library", f"{alias}-lib-builders")
+        self._add_rule("methods",  f"name | {alias}-lib-methods")
 
-
-def get_grammar(prop_order=[], allow_fetch=False, dotall=False, raw_pattern=False, url="", schema=""):
+def get_grammar(prop_order=[], allow_fetch=False, dotall=False, raw_pattern=False, url="", schema="", alias="", name=""):
     converter = SchemaConverter(
         prop_order={name: idx for idx, name in enumerate(prop_order)},
         allow_fetch=allow_fetch,
         dotall=dotall,
-        raw_pattern=raw_pattern)
+        raw_pattern=raw_pattern,
+        alias=alias,
+        name=name)
     schema = converter.resolve_refs(schema, url)
     converter.visit(schema, '')
     return converter
