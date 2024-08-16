@@ -49,13 +49,13 @@ Here is the information to load [Graph4Code](https://github.com/wala/graph4code?
 The original code in graph4code, only works for libraries in pip (ex. matplotlib, numpy...). These code has been moved to ```Data/graph4code/scripts/inspect-modules_for_docstrings_standalone.sh```. You can inspect a module using:
 
 ```
-	sh inspect_modules_for_docstrings_standalone.sh ../output/top_modules.json ../output/modules_out/ ~/anaconda3/ False
+sh inspect_modules_for_docstrings_standalone.sh ../output/top_modules.json ../output/modules_out/ ~/anaconda3/ False
 ```
 
 I updated  ```Data/graph4code/scripts/inspect-modules_for_docstrings.sh``` to work with standard libraries, such as: math or string.
 
 ```
-	sh inspect_modules_for_docstrings.sh ../output/top_modules.json ../output/modules_out/ ~/anaconda3/ False
+sh inspect_modules_for_docstrings.sh ../output/top_modules.json ../output/modules_out/ ~/anaconda3/ False
 ```
 
 The last argument is a boolean and indicates whether the library should be downloaded (True, else False). 
@@ -79,6 +79,8 @@ python grammar/write_grammar.py --lst-function='matplotlib.pyplot.txt' --baselin
 
 I am using the open-source Ollama framework to run LLMs locally. I have modify Ollama's client API to receive a grammar. This way we can pass the grammar to llama.cpp and constrained the decoder with the specified grammar. This approach let you guide any model being hosted in Ollama.
 
-``` ./ollama serve ```
+``` 
+./ollama serve 
+```
 
 [More info to build a modified ollama.](https://github.com/ollama/ollama/blob/main/docs/development.md)
