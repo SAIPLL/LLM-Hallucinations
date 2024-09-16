@@ -1,0 +1,19 @@
+root ::= (except-lib* library more-space except-lib*)*
+
+atomexpr ::= except-lib+
+more-space ::= ( " " | "\n" )
+
+name ::= [a-zA-Z_] [a-zA-Z_0-9]* space
+array ::= "[" space ( value ("," space value)* )? "]" space
+bool ::= ("True" | "False") space
+char ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+decimal-part ::= [0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integral-part ::= [0-9] | [1-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integer ::= ("-"? integral-part) space
+null ::= "null" space
+none ::= "None" space
+number ::= ("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space
+object ::= "{" space ( string ":" space value ("," space string ":" space value)* )? "}" space
+space ::= " "?
+string ::= "\"" char* "\"" space
+value ::= ( object | array | string | number | bool | null | none | library ) space

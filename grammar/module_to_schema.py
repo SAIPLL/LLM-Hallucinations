@@ -108,6 +108,7 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
         composition_rule: parent rule of this function
     """
     file_to_save = f"{path}/{function_name}.json"
+    print(file_to_save)
     json_schema = {
         "type": "object",
         "title": function_name,
@@ -123,7 +124,7 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
     if "param_map" in function:
         for k, v in function["param_map"].items():
             k_name = k.split(":")[0]
-            if "args" in k or k == "kw" or k.startswith("\\"):
+            if "args" in k or k == "kw" or k == "kwds" or k.startswith("\\") or k == "...":
                 if kwargs == False:
                     continue
                 else:
@@ -141,13 +142,15 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
                         }
                     else:
                         # Create dictionary enum
-                        json_schema["properties"][k_name] = {
-                            "type": ["dictionary"]
-                        }
-                        json_schema["properties"][k_name] = {
-                            "enum": create_enum(param_type_info)
-                        }
-                    
+                        lst_enum = create_enum(param_type_info)
+                        if len(lst_enum) > 0:
+                            json_schema["properties"][k_name] = {
+                                "enum": create_enum(param_type_info)
+                            }
+                        else:
+                            json_schema["properties"][k_name] = {
+                                "type": ["value"]
+                            }
                     #  Add required parameters
                     if "optional" in function["param_map"][k]:
                         if  function["param_map"][k]["optional"] == False:
@@ -166,7 +169,7 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
         if "param_names" in function:
             for i in range(0, len(function["param_names"])):
                 param_name = function["param_names"][i].split(':')[0]
-                if ("args" in param_name or param_name =="kw" or param_name.startswith("\\")) and kwargs == False:
+                if ("args" in param_name or param_name == "kwds" or param_name == "kw" or param_name == "..." or param_name.startswith("\\")) and kwargs == False:
                     continue
                 # Unknown type info mark as unknown
                 if ("param_types" not in function) or (i >= len(function["param_types"])):
@@ -176,7 +179,7 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
                 else:
                     param_type = function["param_types"][i].strip()
                 
-                    if "args" in param_name or param_name == "kw" or param_name.startswith("\\"):
+                    if "args" in param_name or param_name == "kw" or param_name == "kwds" or param_name == "..." or param_name.startswith("\\"):
                         if kwargs == False:
                             continue
                         else:
@@ -216,6 +219,46 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
     except (re.error, json.JSONDecodeError, IOError) as e:
         print(f"An error occurred: {e}, in file: {file_to_save}")
 
+def add_property_module(module, builtin_class, composition_rule='__init__'):
+    """
+        Adds the class as a constant to the module
+    """
+    file_construct = f"{module}/{module}/{composition_rule}.json"
+    # Read file
+    try:
+        with open(file_construct, 'r') as file:
+            data = json.load(file)
+        file.close()
+    except:
+        data = {
+                "type": "object",
+                "title": "__init__",
+                "properties": {},
+                "return": module,
+                "required": [],
+                "biggerRule": "",
+                "additionalProperties": False
+            }
+
+    parts = builtin_class.split(module + '.')
+    if len(parts)>1:
+        name = parts[1]
+    else:
+        return
+    
+    new_builtin = dict({
+            name : {
+                "enum": [""]
+            }
+        })
+    
+    data["properties"].update(new_builtin)
+    
+    # Update
+    with open(file_construct, 'w') as file:
+        json.dump(data, file, indent=4)
+    file.close()
+
 def build_init(module, data, kwargs):
     """
         Creates documents based on init
@@ -223,18 +266,26 @@ def build_init(module, data, kwargs):
 
     # Iterate through the list to find constructors
     function_set = set()
+    builtin_set = set()
     for function in data:
         if "klass" in function and "function" in function:
-            if function["klass"] not in function_set:
+            if function["klass"] not in function_set or function["klass"] not in builtin_set:
                 # Constructors and attributes, without private functions
-                if function["function"] == "__init__" and '._' not in function["klass"]:
+                if (function["function"] == "__init__" or function["function"] == "__builtins__") and '._' not in function["klass"]:
                     if module in function["klass"]:
                         function_rule = function["klass"].replace('.', '-')
                         function_rule = function["klass"].replace('_', '-')
-                        function_set.add(function_rule)
                         path_to_function = f"{module}/{function_rule}"
                         os.makedirs(path_to_function, exist_ok=True)
-                        build_json(path_to_function, "__init__", function, function_rule, kwargs, module)
+                        if function["function"] == "__init__":
+                            function_set.add(function_rule)
+                            build_json(path_to_function, "__init__", function, function_rule, kwargs, module)
+                            add_property_module(module, function["klass"])
+                        elif function["function"] == "__builtins__":
+                            if function_rule not in function_set:
+                                builtin_set.add(function_rule)
+                            build_json(path_to_function, "__builtins__", function, function_rule, kwargs, module)
+                            add_property_module(module, function["klass"], "__builtins__")
 
     # Iterate through the list to find non-private functions from the constructors above
     for function in data:
@@ -242,10 +293,15 @@ def build_init(module, data, kwargs):
             # Omits functions different from init and private functions
             function_rule = function["klass"].replace('.', '-')
             function_rule = function["klass"].replace('_', '-')
-            if function_rule in function_set and function["function"] != "__init__" and not function["function"].startswith('_'):
-                path_to_function = f"{module}/{function_rule}"
-                build_json(path_to_function, function["function"], function, function_rule, kwargs, "")
-                add_ref(path_to_function, function["function"])
+            if not function["function"].startswith('_'):
+                if function_rule in function_set and function["function"] != "__init__":
+                    path_to_function = f"{module}/{function_rule}"
+                    build_json(path_to_function, function["function"], function, function_rule, kwargs, "")
+                    add_ref(path_to_function, function["function"])
+                if function_rule in builtin_set and function["function"] != "__builtins__":
+                    path_to_function = f"{module}/{function_rule}"
+                    build_json(path_to_function, function["function"], function, function_rule, kwargs, "")
+                    add_ref(path_to_function, function["function"], "__builtins__")
 
 def consider_function(func_str):
     """
@@ -301,8 +357,8 @@ def convert_data_to_schema(module, file_path, kwargs):
 
 if __name__ == "__main__":
     """ Execute modules' jsons into schema """
-    """ Example usage: python module_to_schema.py --module='pandas' --file='pandas.json' --kwargs=False"""
-    """ Example usage: python module_to_schema.py --module='numpy' --file='Data/graph4code/output/modules_out/numpy/numpy.json' --kwargs=False """
+    """ Example usage: python grammar/module_to_schema.py --module='pandas' --file='pandas.json' --kwargs=False"""
+    """ Example usage: python grammar/module_to_schema.py --module='numpy' --file='Data/graph4code/output/modules_out/numpy/numpy.json' --kwargs=False """
     parser = argparse.ArgumentParser(description="Transform module to json schema.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--module", help="Name of the module to transform.")
     parser.add_argument("--file", help="Path to the json file.")

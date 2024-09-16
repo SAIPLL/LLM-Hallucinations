@@ -155,14 +155,25 @@ class SchemaConverter:
 
     def _add_rule(self, name, rule):
         esc_name = INVALID_RULE_CHARS_RE.sub('-', name)
-        if esc_name not in self._rules or self._rules[esc_name] == rule:
+        if esc_name.replace('--','-') == rule:
+            return ""
+        if esc_name not in self._rules:
             key = esc_name
+        elif esc_name in self._rules:
+            if self._rules[esc_name] == rule:
+                key = esc_name
+            if rule in PRIMITIVE_RULES.keys():
+                key = esc_name
+            elif len(rule) > len(esc_name):
+                key = esc_name
+            else:
+                return ""
         else:
             i = 0
             while f'{esc_name}{i}' in self._rules and self._rules[f'{esc_name}{i}'] != rule:
                 i += 1
             key = f'{esc_name}{i}'
-        self._rules[key] = rule
+        self._rules[key] = rule.replace(' ( "." (  ) )?', '')
         return key
 
     def resolve_refs(self, schema: dict, url: str):
@@ -408,6 +419,7 @@ class SchemaConverter:
             return self._add_rule(rule_name, self._generate_constant_rule(schema['const']))
 
         elif 'enum' in schema:
+            #if len(schema['enum']) > 0:
             enum_arr = schema['enum'] + [""]
             rule = ' | '.join(self._generate_constant_rule(v) for v in enum_arr)
             return self._add_rule(rule_name, rule)
@@ -417,17 +429,25 @@ class SchemaConverter:
               ('additionalProperties' in schema and schema['additionalProperties'] is not True)):
             # Add name from title
             name = schema.get('title')
+            built_rule = ""
+            init_object = False
             # if name its init, change to return type
             if name == "__init__":
                 name = schema.get('return').split('.')[-1].replace('_','-')
-                rule_name = self.alias + '-' + name
+                long_rule = schema.get('return').replace('_','-').replace('.','-')
+                rule_name = self.alias + '-' + long_rule
+                init_object = True
+            elif name == "__builtins__":
+                built_rule = '.'.join(schema.get('biggerRule').split('.')[1:]).replace('_','-')
+                long_rule = schema.get('biggerRule').replace('_','-').replace('.','-')
+                rule_name = self.alias + '-'+ long_rule
             else:
-                parent_rule = schema.get('biggerRule').split('.')[-1].replace('_','-')
-                rule_name = self.alias + '-' + parent_rule + '-' + name
+                parent_rule = schema.get('biggerRule').replace('_','-').replace('.','-')
+                rule_name = self.alias + '-' + parent_rule  + '-' + name
             required = set(schema.get('required', []))
             properties = list(schema.get('properties', {}).items())
-            lower_name = rule_name.lower()
-            return self._add_rule(lower_name, self._build_object_rule(properties, required, rule_name, schema.get('additionalProperties'), name))
+            lower_name = rule_name.replace('_','-').lower()
+            return self._add_rule(lower_name, self._build_object_rule(properties, required, rule_name, schema.get('additionalProperties'), name, built_rule, init_object))
 
         elif schema_type in (None, 'object') and 'allOf' in schema:
             required = set()
@@ -506,7 +526,7 @@ class SchemaConverter:
                 self._add_primitive(dep, dep_rule)
         return n
 
-    def _build_object_rule(self, properties: List[Tuple[str, Any]], required: Set[str], name: str, additional_properties: Union[bool, Any], rule_name: str):
+    def _build_object_rule(self, properties: List[Tuple[str, Any]], required: Set[str], name: str, additional_properties: Union[bool, Any], rule_name: str, built_rule: str, init_object: bool):
         prop_order = self._prop_order
         # sort by position in prop_order (if specified) then by original order
         sorted_props = [kv[0] for _, kv in sorted(enumerate(properties), key=lambda ikv: (prop_order.get(ikv[1][0], len(prop_order)), ikv[0]))]
@@ -517,34 +537,52 @@ class SchemaConverter:
         real_name = rule_name
         name = name.lower()
         rule_name = rule_name.lower()
+        rule = ""
 
         if len(properties) == 0:
-            rule = f"\"{rule_name}\" \"(\" "
-            rule += ' ")"'
+            if built_rule == "":
+                rule = f"\"{rule_name}\" \"(\" "
+                rule += ' ")"'
+            else:
+                rule = f"\"{built_rule}\" "
+                # Get built-in function calls
+                rule_builtins = self._add_rule(
+                    f'lib-builtins',
+                    name.replace(' ', '-').replace('.','-')
+                )
             return rule
 
         methods = [f"{name}-{e}" for e in elements_with_ref] + [name, "\n"]
-        
-        # Add rule for attributes of the object
-        attrs_name = self.alias + '-' + rule_name
-        if attrs_name == name:
-            if len(props_without_refs) > 1:
+
+        if len(props_without_refs) > 1:
+            if real_name == self.name and built_rule == "":
                 rule_attributes = self._add_rule(
-                    f'{name}-attrs', 
+                     f'{name}-const', 
                     ' | '.join(json.dumps(prop) for prop in props_without_refs)
+                )
+            elif init_object:
+                rule_attributes = self._add_rule(
+                    f'{name.replace("_","-")}-attrs', 
+                    ' | '.join(json.dumps(prop) for prop in props_without_refs)
+                )
+        # Add attrs for built-ins
+        if real_name == "__builtins__" and len(props_without_refs) > 1:
+            rule_attributes_builtins = self._add_rule(
+                f'{name}-attrs', 
+                ' | '.join(json.dumps(prop) for prop in props_without_refs)
                 )
 
         prop_kv_rule_names = {}
         for prop_name, prop_schema in properties:
             if real_name != self.name:
-                prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{self.name}-{prop_name}')
-            else:
                 prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{prop_name}')
-            if prop_name not in elements_with_ref:
-                prop_kv_rule_names[prop_name] = self._add_rule(
-                    f'{name}{"-" if name else ""}{prop_name}-kv',
-                    f'({json.dumps(prop_name)} space "=" space)? ({prop_rule_name} | atomexpr | name )'
-                )
+                if prop_name not in elements_with_ref:
+                    prop_kv_rule_names[prop_name] = self._add_rule(
+                        f'{name}{"-" if name else ""}{prop_name}-kv',
+                        f'({json.dumps(prop_name)} space "=" space)? ({prop_rule_name} | atomexpr | name )'
+                    )
+                    #rule_in_case = self._add_rule(prop_rule_name, "value" )
+        
         required_props = [k for k in sorted_props if k in required]
         optional_props = [k for k in sorted_props if k not in required and k not in elements_with_ref]
 
@@ -559,72 +597,90 @@ class SchemaConverter:
             optional_props.append("*")
 
         if real_name != self.name:
-            rule = f"\"{real_name}\" \"(\" "
-            rule += ' "," space '.join(prop_kv_rule_names[k] for k in required_props if k in prop_kv_rule_names)
+            if built_rule == "" and real_name != "__builtins__":
+                rule = f"\"{real_name}\" "
+                if init_object:
+                    rule += ' ( '
+                rule += f"\"(\" "
+                rule += ' "," space '.join(prop_kv_rule_names[k] for k in required_props if k in prop_kv_rule_names)
 
-            if optional_props:
-                rule += ' ('
-                if required_props:
-                    rule += ' "," space ( '
+                if optional_props:
+                    rule += ' ('
+                    if required_props:
+                        rule += ' "," space ( '
 
-                def get_recursive_refs(ks, first_is_optional):
-                    [k, *rest] = ks
-                    kv_rule_name = prop_kv_rule_names[k]
-                    if k == '*':
-                        res = self._add_rule(
-                            f'{name}{"-" if name else ""}additional-kvs',
-                            f'{kv_rule_name} ( "," space ' + kv_rule_name + ' )*'
-                        )
-                    elif first_is_optional:
-                        res = f'( "," space {kv_rule_name} )?'
-                    else:
-                        res = kv_rule_name
-                    if len(rest) > 0:
-                        res += ' ' + self._add_rule(
-                            f'{name}{"-" if name else ""}{k}-rest',
-                            get_recursive_refs(rest, first_is_optional=True)
-                        )
-                    return res
+                    def get_recursive_refs(ks, first_is_optional):
+                        [k, *rest] = ks
+                        kv_rule_name = prop_kv_rule_names[k]
+                        if k == '*':
+                            res = self._add_rule(
+                                f'{name}{"-" if name else ""}additional-kvs',
+                                f'{kv_rule_name} ( "," space ' + kv_rule_name + ' )*'
+                            )
+                        elif first_is_optional:
+                            res = f'( "," space {kv_rule_name} )?'
+                        else:
+                            res = kv_rule_name
+                        if len(rest) > 0:
+                            res += ' ' + self._add_rule(
+                                f'{name}{"-" if name else ""}{k}-rest',
+                                get_recursive_refs(rest, first_is_optional=True)
+                            )
+                        return res
 
-                rule += ' | '.join(
-                    get_recursive_refs(optional_props[i:], first_is_optional=False)
-                    for i in range(len(optional_props))
-                )
-                if required_props:
-                    rule += ' )'
+                    rule += ' | '.join(
+                        get_recursive_refs(optional_props[i:], first_is_optional=False)
+                        for i in range(len(optional_props))
+                    )
+                    if required_props:
+                        rule += ' )'
+                    
+                    rule += ' )?'
                 
-                rule += ' )?'
-            
-            rule += ' ")"'
+                rule += ' ")"'
+
+                if init_object:
+                    rule += ' )?'
+            else:
+                rule = f"\"{built_rule}\""
 
         # Add optional trailer, this means attributes and methods
         if elements_with_ref[0] != "\n" or props_without_refs[0] != "\n":
-            if real_name != self.name:
+            if init_object and real_name != self.name or real_name == "__builtins__":
                 rule += ' ( "." ( '
-            else:
-                rule = '( ('
+            elif real_name == self.name:
+                rule += ' ( ('
 
-            rule += ' | '.join( f"{name}-{elements_with_ref[i].replace('_','-').lower()}"
+            rule += ' | '.join( f"{name}-{elements_with_ref[i].replace('_','-').replace(' ','-').replace('.','-').lower()}"
                 for i in range(0,len(elements_with_ref)-1)
             )
 
-            rule_library = self._add_rule(
-                f'libmethods', name
-            )
-
-            rule_methods = self._add_rule(
-                f'lib',
-                f' | '.join( f"{name}-{elements_with_ref[i].replace('_','-').lower()}"
-                   for i in range(0, len(elements_with_ref)-1)
+            if name != f"{self.alias}-{self.name}":
+                if built_rule == "": 
+                    rule_inits = self._add_rule(
+                        f'lib-inits', name.replace(' ', '-').replace('.','-')
+                    )
+                else:
+                    # Get built-in function calls
+                    rule_builtins = self._add_rule(
+                        f'lib-builtins',
+                        #f' | '.join( f"{name}-{elements_with_ref[i].replace('_','-').replace(' ','-').lower()}"
+                           #for i in range(0, len(elements_with_ref)-1)
+                        #)
+                    name.replace(' ', '-').replace('.','-')
                 )
-            )
 
-            if attrs_name == name and len(props_without_refs) > 1:
-                if elements_with_ref[0] != "\n":
+            if init_object or real_name == "__builtins__":
+                if elements_with_ref[0] != "\n" and props_without_refs[0] != "\n":
                     rule += f' | '
-                rule += f'{name}-attrs ) )?'
-            else:
-                rule += f' ) )?'
+                if real_name == self.name and built_rule == "":
+                    rule += f'{name.replace(" ","-")}-const ) )?'
+                elif props_without_refs[0] != "\n":
+                    rule += f'{name.replace(" ","-").replace("_","-")}-attrs ) )?'
+                    # To create an import, we need to save the real-name only
+
+                else:
+                    rule += f' ) )'
 
         return rule
 
@@ -648,22 +704,34 @@ class SchemaConverter:
             # Append libmethods
             if key in self._rules:
                 if value != "":
-                    if key == 'libmethods' or key == 'lib':
+                    if key == 'lib-builtins' or key == 'lib-inits':
                         self._rules[key] = self._rules[key] + ' | ' + value.replace('_', '-')
+                    else:
+                        if value in PRIMITIVE_RULES.keys():
+                            self._rules[key] = value
+                        elif self._rules[key] in PRIMITIVE_RULES.keys():
+                            continue
+                        elif len(value) > len(self._rules[key]):
+                            self._rules[key] = value
             else:
                 if value != "":
                     # If the key does not exist in the merged dictionary, add it
-                    if key == 'libmethods' or key == 'lib':
+                    if key == 'lib-builtins' or key == 'lib-inits':
                         self._rules[key] = value.replace('_', '-')
                     else:
                         self._rules[key] = value
     
     def format_lib(self, alias):
         # Modify libmethods to work with alias of library
-        self._rules[f"{alias}-lib-builders"] = f"\"{alias}.\" ( {self._rules['libmethods']} )"
-        self._rules[f"{alias}-lib-methods"] = self._rules['lib']
-        self._add_rule("library", f"{alias}-lib-builders")
-        self._add_rule("methods",  f"name | {alias}-lib-methods")
+        rule_name = self.name.replace('.','-')
+        self._rules[f"{alias}-lib-inits"] = f"\"{alias}.\" ( {self._rules['lib-inits']} | {self.alias}-{rule_name}-const )"
+        self._rules[f"{alias}-lib-inits-none"] = f"( {self._rules['lib-inits']} )"
+        if "lib-builtins" in self._rules:
+            self._rules[f"{rule_name}-lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} | {self.alias}-{rule_name}-attrs )"
+            self._rules[f"{rule_name}-lib-builtins-none"] = f"( {self._rules['lib-builtins']} | {self.alias}-{rule_name}-attrs )"
+        else:
+            self._rules[f"{rule_name}-lib-builtins"] = ""
+            self._rules[f"{rule_name}-lib-builtins-none"] = ""
 
 def get_grammar(prop_order=[], allow_fetch=False, dotall=False, raw_pattern=False, url="", schema="", alias="", name=""):
     converter = SchemaConverter(
