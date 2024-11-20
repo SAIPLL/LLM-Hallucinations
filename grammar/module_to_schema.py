@@ -100,6 +100,47 @@ def add_ref(path, function_name, composition_rule='__init__'):
     file.close()
 
 
+def find_docstring_params(func, func_docstring, json_schema):
+    mandatory_p = []
+    opt_defaults = []
+    pattern = rf"{func}\([^)]*\)"
+    # Search for the pattern in the text
+    match = re.search(pattern, func_docstring)    
+    if match:
+        definition = match.group()
+        # Find declaration with default assignments
+        if '=' in definition:
+            pattern = r"(\w+)(?==)"
+            opt_defaults = re.findall(pattern, definition)
+        else:
+            pattern = r"\(([^()]*)\)"
+            match = re.search(pattern, definition)
+            if match:
+                def_params = match.group(1)
+                def_paramss = def_params.split("[")
+                for dp in def_paramss:
+                    dps = dp.split(",")
+                    dps = [d.strip().replace("]", "") if d != '' else d for d in dps]
+                    if len(dps) > 2:
+                        mandatory_p = dps
+                    elif len(dps) == 2:
+                        opt_defaults.append(dps[1])
+                    elif dps[0] != '':
+                         opt_defaults.append(dps[0])
+    
+    for param_name in mandatory_p:
+            json_schema["properties"][param_name] = {
+                    "type": ['value']
+                }
+    for param_name in opt_defaults:
+        json_schema["properties"][param_name] = {
+                "type": ['value']
+            }
+    # Add required parameters for function
+    json_schema["required"] = mandatory_p
+    
+    return json_schema
+
 def build_json(path, function_name, function, composition_rule, kwargs, module_name):
     """
         path: string of the form module/object/
@@ -165,39 +206,42 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
                     json_schema["properties"][k_name] = {
                             "type": ["value"]
                     }
-    else:
-        if "param_names" in function:
-            for i in range(0, len(function["param_names"])):
-                param_name = function["param_names"][i].split(':')[0]
-                if ("args" in param_name or param_name == "kwds" or param_name == "kw" or param_name == "..." or param_name.startswith("\\")) and kwargs == False:
-                    continue
-                # Unknown type info mark as unknown
-                if ("param_types" not in function) or (i >= len(function["param_types"])):
-                    json_schema["properties"][param_name] = {
-                        "type": ['value']
-                    }
-                else:
-                    param_type = function["param_types"][i].strip()
-                
-                    if "args" in param_name or param_name == "kw" or param_name == "kwds" or param_name == "..." or param_name.startswith("\\"):
-                        if kwargs == False:
-                            continue
-                        else:
-                            json_schema["properties"]["kwargs"] = {
-                                "type":["kwargs"]
-                            }
+    elif "param_names" in function:
+        for i in range(0, len(function["param_names"])):
+            param_name = function["param_names"][i].split(':')[0]
+            if ("args" in param_name or param_name == "kwds" or param_name == "kw" or param_name == "..." or param_name.startswith("\\")) and kwargs == False:
+                continue
+            # Unknown type info mark as unknown
+            if ("param_types" not in function) or (i >= len(function["param_types"])):
+                json_schema["properties"][param_name] = {
+                    "type": ['value']
+                }
+            else:
+                param_type = function["param_types"][i].strip()
+            
+                if "args" in param_name or param_name == "kw" or param_name == "kwds" or param_name == "..." or param_name.startswith("\\"):
+                    if kwargs == False:
+                        continue
                     else:
-                        sep_type = param_type.split('|')
-                        param_type_vars = return_types(sep_type)
-                        if param_name in  json_schema["properties"]:
-                            json_schema["properties"][param_name]['type'] =  json_schema["properties"][param_name]['type'] + param_type_vars[0]
-                        else:
-                            json_schema["properties"][param_name] = {
-                                "type": param_type_vars[0]
-                            }
-                        param_t_str = [param.strip() for param in sep_type]
-                        if 'None' not in param_t_str:
-                            json_schema["required"].append(param_name)
+                        json_schema["properties"]["kwargs"] = {
+                            "type":["kwargs"]
+                        }
+                else:
+                    sep_type = param_type.split('|')
+                    param_type_vars = return_types(sep_type)
+                    if param_name in  json_schema["properties"]:
+                        json_schema["properties"][param_name]['type'] =  json_schema["properties"][param_name]['type'] + param_type_vars[0]
+                    else:
+                        json_schema["properties"][param_name] = {
+                            "type": param_type_vars[0]
+                        }
+                    param_t_str = [param.strip() for param in sep_type]
+                    if 'None' not in param_t_str:
+                        json_schema["required"].append(param_name)
+    elif "function_docstring" in function:
+        json_schema = find_docstring_params(function["function"], function["function_docstring"], json_schema)
+    elif "class_docstring" in function:
+        json_schema = find_docstring_params(function_name, function["class_docstring"], json_schema)
     
     # Add return type if any
     if function_name == "__init__":
@@ -269,21 +313,26 @@ def build_init(module, data, kwargs):
     builtin_set = set()
     for function in data:
         if "klass" in function and "function" in function:
+            if function["module"]:
+                submodule = function["module"]
+            else:
+                submodule = "NA"
             if function["klass"] not in function_set or function["klass"] not in builtin_set:
                 # Constructors and attributes, without private functions
                 if (function["function"] == "__init__" or function["function"] == "__builtins__") and '._' not in function["klass"]:
-                    if module in function["klass"]:
+                    if not function["klass"].startswith('_'):
+                        function["klass"] = function["klass"].replace("enum ", "")
                         function_rule = function["klass"].replace('.', '-')
                         function_rule = function["klass"].replace('_', '-')
                         path_to_function = f"{module}/{function_rule}"
                         os.makedirs(path_to_function, exist_ok=True)
                         if function["function"] == "__init__":
-                            function_set.add(function_rule)
+                            function_set.add(function["klass"])
                             build_json(path_to_function, "__init__", function, function_rule, kwargs, module)
                             add_property_module(module, function["klass"])
                         elif function["function"] == "__builtins__":
                             if function_rule not in function_set:
-                                builtin_set.add(function_rule)
+                                builtin_set.add(function["klass"])
                             build_json(path_to_function, "__builtins__", function, function_rule, kwargs, module)
                             add_property_module(module, function["klass"], "__builtins__")
 
@@ -291,6 +340,7 @@ def build_init(module, data, kwargs):
     for function in data:
         if "klass" in function and "function" in function:
             # Omits functions different from init and private functions
+            function["klass"] = function["klass"].replace("enum ", "")
             function_rule = function["klass"].replace('.', '-')
             function_rule = function["klass"].replace('_', '-')
             if not function["function"].startswith('_'):
@@ -302,6 +352,13 @@ def build_init(module, data, kwargs):
                     path_to_function = f"{module}/{function_rule}"
                     build_json(path_to_function, function["function"], function, function_rule, kwargs, "")
                     add_ref(path_to_function, function["function"], "__builtins__")
+        elif function["module"] in builtin_set and "function" not in function:
+            # Add class objects this is particular for CPython modules, such as datetime
+            function_name = function["klass"].split('.')[-1]
+            if not function_name.startswith('_'):
+                path_to_function = f"{module}/{function_name}"
+                build_json(path_to_function, function_name, function, function_name, kwargs, "")
+                add_ref(path_to_function, function_name, "__builtins__")
 
 def consider_function(func_str):
     """

@@ -419,10 +419,11 @@ class SchemaConverter:
             return self._add_rule(rule_name, self._generate_constant_rule(schema['const']))
 
         elif 'enum' in schema:
-            #if len(schema['enum']) > 0:
-            enum_arr = schema['enum'] + [""]
-            rule = ' | '.join(self._generate_constant_rule(v) for v in enum_arr)
-            return self._add_rule(rule_name, rule)
+            if schema['enum'][0] != "":
+                enum_arr = schema['enum'] + [""]
+                rule = ' | '.join(self._generate_constant_rule(v) for v in enum_arr)
+                return self._add_rule(rule_name, rule)
+            return
 
         elif schema_type in (None, 'object') and \
              ('properties' in schema or \
@@ -446,7 +447,7 @@ class SchemaConverter:
                 rule_name = self.alias + '-' + parent_rule  + '-' + name
             required = set(schema.get('required', []))
             properties = list(schema.get('properties', {}).items())
-            lower_name = rule_name.replace('_','-').lower()
+            lower_name = rule_name.replace('_','-').replace('.','-').lower()
             return self._add_rule(lower_name, self._build_object_rule(properties, required, rule_name, schema.get('additionalProperties'), name, built_rule, init_object))
 
         elif schema_type in (None, 'object') and 'allOf' in schema:
@@ -538,6 +539,12 @@ class SchemaConverter:
         name = name.lower()
         rule_name = rule_name.lower()
         rule = ""
+        #if real_name == "nobody_uid":
+            #print(name)
+            #print(real_name)
+            #print(built_rule)
+            #print(init_object)
+            #print(rule)
 
         if len(properties) == 0:
             if built_rule == "":
@@ -558,7 +565,7 @@ class SchemaConverter:
             if real_name == self.name and built_rule == "":
                 rule_attributes = self._add_rule(
                      f'{name}-const', 
-                    ' | '.join(json.dumps(prop) for prop in props_without_refs)
+                    f"( {' | '.join(json.dumps(prop) for prop in props_without_refs)} more-space )"
                 )
             elif init_object:
                 rule_attributes = self._add_rule(
@@ -573,18 +580,23 @@ class SchemaConverter:
                 )
 
         prop_kv_rule_names = {}
+        remove_from_optional = []
         for prop_name, prop_schema in properties:
-            if real_name != self.name:
+            if (real_name != self.name) or ((real_name == self.name) and not init_object):
+                if "enum" in prop_schema:
+                    if prop_schema["enum"][0] == "":
+                        remove_from_optional.append(prop_name)
+                        continue
                 prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{prop_name}')
                 if prop_name not in elements_with_ref:
                     prop_kv_rule_names[prop_name] = self._add_rule(
                         f'{name}{"-" if name else ""}{prop_name}-kv',
-                        f'({json.dumps(prop_name)} space "=" space)? ({prop_rule_name} | atomexpr | name )'
+                        f'({json.dumps(prop_name)} space "=" space)? ({prop_rule_name} | class-object  | name )'
                     )
                     #rule_in_case = self._add_rule(prop_rule_name, "value" )
         
         required_props = [k for k in sorted_props if k in required]
-        optional_props = [k for k in sorted_props if k not in required and k not in elements_with_ref]
+        optional_props = [k for k in sorted_props if k not in required and k not in elements_with_ref and k not in remove_from_optional]
 
 
         if additional_properties == True or isinstance(additional_properties, dict):
@@ -592,11 +604,11 @@ class SchemaConverter:
             value_rule = self.visit({} if additional_properties == True else additional_properties, f'{sub_name}-value')
             prop_kv_rule_names["*"] = self._add_rule(
                 f'{sub_name}-kv',
-                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | atomexpr | name )'
+                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | class-object | name )'
             )
             optional_props.append("*")
 
-        if real_name != self.name:
+        if ((real_name != self.name) and (real_name != self.name.split('.')[-1])) or ((real_name == self.name) and not init_object):
             if built_rule == "" and real_name != "__builtins__":
                 rule = f"\"{real_name}\" "
                 if init_object:
@@ -648,10 +660,10 @@ class SchemaConverter:
         if elements_with_ref[0] != "\n" or props_without_refs[0] != "\n":
             if init_object and real_name != self.name or real_name == "__builtins__":
                 rule += ' ( "." ( '
-            elif real_name == self.name:
+            elif real_name == self.name and init_object:
                 rule += ' ( ('
 
-            rule += ' | '.join( f"{name}-{elements_with_ref[i].replace('_','-').replace(' ','-').replace('.','-').lower()}"
+            rule += ' | '.join( f"{name.replace('.','-')}-{elements_with_ref[i].replace('_','-').replace(' ','-').replace('.','-').lower()}"
                 for i in range(0,len(elements_with_ref)-1)
             )
 
@@ -671,16 +683,23 @@ class SchemaConverter:
                 )
 
             if init_object or real_name == "__builtins__":
+                attrs_rule = f'{name.replace(" ","-").replace("_","-")}-attrs'
                 if elements_with_ref[0] != "\n" and props_without_refs[0] != "\n":
                     rule += f' | '
-                if real_name == self.name and built_rule == "":
+                if real_name == self.name and built_rule == "" and not init_object:
                     rule += f'{name.replace(" ","-")}-const ) )?'
-                elif props_without_refs[0] != "\n":
-                    rule += f'{name.replace(" ","-").replace("_","-")}-attrs ) )?'
+                elif props_without_refs[0] != "\n" and attrs_rule in self._rules:
+                    rule += f'{attrs_rule} ) )?'
                     # To create an import, we need to save the real-name only
-
                 else:
                     rule += f' ) )'
+
+        #if real_name == "pprint":
+            #print(name)
+            #print(real_name)
+            #print(built_rule)
+            #print(init_object)
+            #print(rule)
 
         return rule
 
@@ -695,7 +714,15 @@ class SchemaConverter:
                         rule = rule[0:-7]
                     if rule.endswith('\"\"'):
                         rule = rule[0:-9]
-                    val += f'{name} ::= {rule}\n'
+                    if rule.strip().startswith('\"\" ( \".\" (') and not (name.endswith('-const') or name.endswith('-attrs')):
+                        del self._rules[name]
+                        continue
+                    if rule == " ( (" and not (name.endswith('-const') or name.endswith('-attrs')):
+                        del self._rules[name]
+                        continue
+                    val += f'{name.replace(".","-")} ::= {rule}\n'
+                else:
+                    del self._rules[name]
         return val
 
 
@@ -711,6 +738,8 @@ class SchemaConverter:
                             self._rules[key] = value
                         elif self._rules[key] in PRIMITIVE_RULES.keys():
                             continue
+                        elif '\"' in value:
+                            self._rules[key] = value
                         elif len(value) > len(self._rules[key]):
                             self._rules[key] = value
             else:
@@ -720,18 +749,47 @@ class SchemaConverter:
                         self._rules[key] = value.replace('_', '-')
                     else:
                         self._rules[key] = value
-    
-    def format_lib(self, alias):
+    def clean_inits(self, key):
+        if key in self._rules:
+            rule = self._rules[key]
+            rule = rule.replace('(', '')
+            rule = rule.replace(')', '')
+            rule_s = rule.split(' | ')
+            rule_good = []
+            for r in rule_s:
+                r = r.strip()
+                if r in self._rules:
+                    if not self._rules[r].strip().startswith('\"\" ( \".\" (') and not self._rules[r] == " ( (":
+                        rule_good.append(r)
+            self._rules[key] = f"{' | '.join(rule_good)}"
+
+
+    def format_lib(self):
         # Modify libmethods to work with alias of library
         rule_name = self.name.replace('.','-')
-        self._rules[f"{alias}-lib-inits"] = f"\"{alias}.\" ( {self._rules['lib-inits']} | {self.alias}-{rule_name}-const )"
-        self._rules[f"{alias}-lib-inits-none"] = f"( {self._rules['lib-inits']} )"
-        if "lib-builtins" in self._rules:
-            self._rules[f"{rule_name}-lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} | {self.alias}-{rule_name}-attrs )"
-            self._rules[f"{rule_name}-lib-builtins-none"] = f"( {self._rules['lib-builtins']} | {self.alias}-{rule_name}-attrs )"
-        else:
-            self._rules[f"{rule_name}-lib-builtins"] = ""
-            self._rules[f"{rule_name}-lib-builtins-none"] = ""
+        const_rule = f"{self.alias}-{rule_name}-const"
+        attr_rule = f"{self.alias}-{rule_name}-attrs"
+        self.clean_inits('lib-inits')
+        self.clean_inits('lib-builtins')
+        if "lib-inits" in self._rules and const_rule in self._rules:
+            if const_rule != "":
+                self._rules[f"lib-inits"] = f"\"{self.alias}.\" ( {self._rules['lib-inits']} | {const_rule} )"
+        if "lib-inits" in self._rules and const_rule not in self._rules:
+            self._rules[f"lib-inits"] =  f"\"{self.alias}.\" ( {self._rules['lib-inits']} )"
+        if "lib-inits" not in self._rules and const_rule in self._rules:
+            self._rules[f"lib-inits"] = f"\"{self.alias}.\" ( {const_rule} )"
+        if "lib-inits" not in self._rules and const_rule not in self._rules:
+            self._rules[f"lib-inits"] = ""
+
+        if "lib-builtins" in self._rules and attr_rule in self._rules:
+            if attr_rule != "":
+                self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} | {attr_rule} )"
+        if "lib-builtins" in self._rules and attr_rule not in self._rules:
+            self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} )"
+        if "lib-builtins" not in self._rules and attr_rule in self._rules:
+            self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {attr_rule} )"
+        if "lib-builtins" not in self._rules and attr_rule not in self._rules:
+            self._rules[f"lib-builtins"] = ""
 
 def get_grammar(prop_order=[], allow_fetch=False, dotall=False, raw_pattern=False, url="", schema="", alias="", name=""):
     converter = SchemaConverter(

@@ -14,48 +14,25 @@ def get_schema(url, alias, name):
 		schema = json.load(f)
 	return get_grammar(url=url, schema=schema, alias=alias, name=name)
 
-def negate_alias_name(aliases=[], names=[], rules=[]):
+def negate_alias_name(alias="", name=""):
 	"""
 		Negates an alias correctly and adds these
 		rules to the connection rules
 	"""
-
-	# Add negation of module name
-	for name in names:
-		rules.append(
-			f'non-{name}-name ::= ( \"{name}\" [^.] ) \n'
-		)
-	# Add correct negation of alias
-	for alias in aliases:
-		non_alias_rule = []
-		alias_dot = alias + "."
-		for i in range(1, len(alias_dot) + 1):
-			alias_format = f' \"{alias_dot[:i-1]}\" [^{alias_dot[i-1:i]}] '
-			non_alias_rule.append(alias_format)	
-		rules.append(
-			f'non-{alias} ::= ( ' + " | ".join(non_alias_rule) + " ) \n"
-		)
-
-	return rules
-
-def connect_library_rules(aliases=[], names=[], original_name=[]):
-	"""
-		Return grammar rules which connects classes and methods
-	"""
 	rules = []
-	alias_format = [f'non-{alias}' for alias in aliases]
-	name_format = [f'non-{name}-name' for name in original_name]
-	alias_inits = [f'{alias}-lib-inits' for alias in aliases]
-	name_builtins = [f'{name}-lib-builtins' for name in names]
-	without_alias_inits = [f'{alias}-lib-inits-none' for alias in aliases]
-	whithout_name_builtins = [f'{name}-lib-builtins-none' for name in names]
+	# Add negation of module name
 	rules.append(
-		("except-lib ::= ( " + " | ".join(alias_format) + ' | ' +  " | ".join(name_format) + " ) \n")
+		f'( \"{name}\" [^.] ) \n'
 	)
+	# Add correct negation of alias
+	non_alias_rule = []
+	alias_dot = alias + "."
+	for i in range(1, len(alias_dot) + 1):
+		alias_format = f' \"{alias_dot[:i-1]}\" [^{alias_dot[i-1:i]}] '
+		non_alias_rule.append(alias_format)	
 	rules.append(
-	    ("library ::= ( " + " | ".join(alias_inits) + ' | ' + " | ".join(name_builtins) + ' | ' + " | ".join(without_alias_inits) + ' | ' + " | ".join(whithout_name_builtins) + " ) \n")
+			f'( ' + " | ".join(non_alias_rule) + " ) \n"
 	)
-	rules = negate_alias_name(aliases, original_name, rules)
 	return rules
 
 def belongs_list(file_function, lst_filter):
@@ -67,45 +44,83 @@ def belongs_list(file_function, lst_filter):
 			return True
 	return False
 
-def run_write_schema(lst_function, alias, name, file_path, lst_filter):
+def add_library_connector(name, rule, library_dict):
+	"""
+		Adds connector rules to library
+	"""
+	if name not in library_dict:
+		library_dict[name] = {"library" : rule.replace('(  | ', '( ')}
+	else:
+		library_dict[name] = {"library" : f" ( {library_dict[name]['library']} | {rule} )".replace('(  | ', '( ')  }
+	return library_dict
+
+def read_file(file_name):
+	"""
+		Return lines of a file
+	"""
+	with open(file_name, 'r') as file:
+		lines = file.readlines()
+	file.close()
+	return lines
+
+def run_write_schema(lst_function, alias, name, file_path, lst_filter, library_dict):
 	"""
 		Processes and writes the grammar into a file
 	"""
 	start_time = datetime.datetime.now()
 	
 	# Read lines/functions in file
-	with open(lst_function, 'r') as file:
-		lst_function = file.readlines()
-
-	# Read lines of modules to filter from files
-	with open(lst_filter, 'r') as ff:
-		lst_filter = ff.readlines()
-
+	lst_function = read_file(lst_function)
 	# Sort lines, prioritizing those containing '__init__'
 	sorted_lines = sorted(lst_function, key=lambda line: (0 if '__init__' in line else 1, line))
 	lst_function = [file.strip() for file in sorted_lines]
-	lst_filter = [file.strip() for file in lst_filter]
-	# Get first Schema)
+	if len(lst_filter) > 1:
+		# Read lines of modules to filter from files
+		lst_filter = read_file(lst_filter)
+		lst_filter = [file.strip() for file in lst_filter]
+	else:
+		# There is not a filter file, empty the filter list
+		lst_filter = []
+	
+	# Get first Schema
 	start_time = datetime.datetime.now()
 	schema_global = get_schema(lst_function[0], alias, name)
 	for i in range(1, len(lst_function)):
 		# Add following rules of functions
 		if lst_function[i].endswith(".json"):
-			if belongs_list(lst_function[i], lst_filter):
+			if len(lst_filter) > 0:
+				if belongs_list(lst_function[i], lst_filter):
+					schema = get_schema(lst_function[i], alias, name)
+					schema_global.merge_converter(schema)
+			else:
 				schema = get_schema(lst_function[i], alias, name)
 				schema_global.merge_converter(schema)
 		#print(f"Done ({i}): {lst_function[i]}")
-	schema_global.format_lib(alias)
+	
+	# Adds alias and name to beginning of rules
+	schema_global.format_lib()
+	# Pop rules from global_schema and adds them to dictionary
 	if 'lib-builtins' in schema_global._rules:
+		if name != "tensorflow":
+			library_dict = add_library_connector(name, schema_global._rules["lib-builtins"], library_dict)
 		schema_global._rules.pop('lib-builtins')
-	schema_global._rules.pop('lib-inits')
+	if 'lib-inits' in schema_global._rules:
+		library_dict = add_library_connector(name, schema_global._rules["lib-inits"], library_dict)
+		schema_global._rules.pop('lib-inits')
+	# Adds the root rule
+	library_dict[name] = { 
+		"library" : library_dict[name]['library'],
+		"root" : f" ( ( {' | '.join(negate_alias_name(alias, name))} ) | {library_dict[name]['library']} )"
+	}
 
 	# Append new grammar lines from the listed functions
 	with open(file_path, 'a') as copy_file:
-		copy_file.write('\n' + schema_global.format_grammar().replace('ExceptHandler','excepthandler'))
+		#copy_file.write('\n' + schema_global.format_grammar().replace('ExceptHandler','excepthandler'))
+		copy_file.write('\n' + schema_global.format_grammar())
 
 	end_time = datetime.datetime.now()
 	print(f"# Rules: {len(lst_function)}, Duration (s): {(end_time-start_time).total_seconds()}")
+	return library_dict
 
 def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',modules_list='question1.txt', alias=['pd'], name=['pandas'], namespace_filter=""):
 	"""
@@ -115,16 +130,9 @@ def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',module
 		grammar_name: contains a list of the file_paths of the library to use
 	"""
 	# Read list of libraries to use
-	with open(modules_list, 'r') as file:
-		lst_files = file.readlines()
-
-	# Read list of filters to use
-	with open(namespace_filter, 'r') as file_filter:
-		lst_filters = file_filter.readlines()
-
-	# Read the baseline grammar file 
-	with open(baseline_grammar, 'r') as original_file:
-		original_lines = original_file.readlines()
+	lst_files = read_file(modules_list)
+	lst_filters = read_file(namespace_filter)
+	original_lines = read_file(baseline_grammar)
 
 	# Write the original lines to the new file (copy)
 	# Create name for file
@@ -134,14 +142,25 @@ def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',module
 	with open(copy_file_path, 'w') as copy_file:
 		copy_file.writelines(original_lines)
 	
+	# Dictionary to save all library connector rules
+	library_dict = {}
 	for i in range(0, len(alias)):
-		run_write_schema(lst_files[i].strip(), alias[i], name[i], copy_file_path, lst_filters[i].strip())
+		library_dict = run_write_schema(lst_files[i].strip(), alias[i], name[i], copy_file_path, lst_filters[i].strip(), library_dict)
 
-	# Add the two lines to connect the library grammar
-	# If any name contains '.' change it to '-'
-	names = [n.replace('.','-') for n in name]
-	c_rules = connect_library_rules(alias, names, name)
 	with open(copy_file_path, 'a') as copy_file:
+		# Add connector rules to file
+		library_rules = [library_dict[k]["library"] for k in library_dict.keys()]
+		root_rules = [library_dict[k]["root"] for k in library_dict.keys()]
+		c_rules = []
+		if len(library_rules) > 1:
+			c_rules = [f"library ::= ( {'|'.join(library_rules)} ) \n "]
+		else:
+			c_rules = [f"library ::= ( {library_rules[0]} ) \n "]
+		if len(root_rules) > 1:
+			c_rules.append(f"root ::= ( {'|'.join(root_rules)} )+")
+		else:
+			c_rules.append(f"root ::= ( {root_rules[0]} )+")
+
 		copy_file.writelines(c_rules)
 
 # Define a custom argument type for a list of strings
@@ -154,16 +173,27 @@ if __name__ == '__main__':
 	""" Example usage: python grammar/write_grammar.py --lst-function='ds.txt' --baseline-grammar='grammar/any.gbnf' --alias="['pd','np','sklearn','scipy','torch','tf','plt']" --name="['pandas','numpy','sklearn','scipy','torch','tensorflow','matplotlib.pyplot']" """
 	""" Example usage: python grammar/write_grammar.py --lst-function='numpy.txt' --baseline-grammar='grammar/generic.gbnf' --alias="['np']" --name="['numpy']" --lst-namespace='filter_numpy.txt' """
 	""" Example usage: python grammar/write_grammar.py --lst-function='numpy_pandas.txt' --baseline-grammar='grammar/any.gbnf' --alias="['np','pd']" --name="['numpy','pandas']" --lst-namespace='filter.txt' """
+	""" Example usage: python grammar/write_grammar.py --lst-function='dsall.txt' --baseline-grammar='grammar/generic.gbnf' --alias="['np','pd']" --name="['numpy','pandas']" --lst-namespace='filter.txt' """
 	parser = argparse.ArgumentParser(description="Write grammar to constraint the inference of non-standalone code.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument("--lst-function", help="File containing the list of json functions to add.")
 	parser.add_argument("--baseline-grammar", help="File contaning the first lines of the baseline grammar.")
 	parser.add_argument("--alias", help="List of most common library's alias to prefix rule.", type=list_of_strings)
 	parser.add_argument("--name", help="List of libraries name.", type=list_of_strings)
+	parser.add_argument("--alias-file", help="File containing the list of libraries aliases.") 
+	parser.add_argument("--name-file", help="File containing the list of libraries names.") 
 	parser.add_argument("--lst-namespace", help="File containing a list of modules to filter.")
 
-
 	args = parser.parse_args()
-	save_gbnf_grammar_from_documentation(args.baseline_grammar, args.lst_function, args.alias, args.name, args.lst_namespace)
+	if args.alias_file != "":
+		alias_lst = read_file(args.alias_file)
+	else:
+		alias_lst = args.alias
+	if args.name_file != "":
+		name_lst = read_file(args.name_file)
+	else:
+		name_lst = args.name
+
+	save_gbnf_grammar_from_documentation(args.baseline_grammar, args.lst_function, alias_lst, name_lst, args.lst_namespace)
 
 	#save_gbnf_grammar_from_documentation("any.gbnf", "numpy.txt", ['np'], ["numpy"])
 
