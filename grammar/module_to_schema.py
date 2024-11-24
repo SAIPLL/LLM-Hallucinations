@@ -22,7 +22,7 @@ def return_types(type_str):
     
     if len(full_type) == 0:
         # More than two options,
-        return (['value'], full_type)
+        return (['op-expr'], full_type)
 
     # Valid set of knowns
     known_vars = set({'integer', 'string', 'array', 'bool', 'array', 'object'})
@@ -41,7 +41,7 @@ def return_types(type_str):
         elif chosen_type.startswith('dict'):
                  return_lst.append('object')
         else:
-             return (['value'], full_type)
+             return (['op-expr'], full_type)
     return (return_lst, full_type)
 
 def create_enum(type_str):
@@ -130,11 +130,11 @@ def find_docstring_params(func, func_docstring, json_schema):
     
     for param_name in mandatory_p:
             json_schema["properties"][param_name] = {
-                    "type": ['value']
+                    "type": ['op-expr']
                 }
     for param_name in opt_defaults:
         json_schema["properties"][param_name] = {
-                "type": ['value']
+                "type": ['op-expr']
             }
     # Add required parameters for function
     json_schema["required"] = mandatory_p
@@ -191,7 +191,7 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
                             }
                         else:
                             json_schema["properties"][k_name] = {
-                                "type": ["value"]
+                                "type": ["op-expr"]
                             }
                     #  Add required parameters
                     if "optional" in function["param_map"][k]:
@@ -209,7 +209,7 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
 
                 else:
                     json_schema["properties"][k_name] = {
-                            "type": ["value"]
+                            "type": ["op-expr"]
                     }
         # If everything is required, because of default, save just the first var a required
         if time_optional == 0:
@@ -223,7 +223,7 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
             # Unknown type info mark as unknown
             if ("param_types" not in function) or (i >= len(function["param_types"])):
                 json_schema["properties"][param_name] = {
-                    "type": ['value']
+                    "type": ['op-expr']
                 }
             else:
                 param_type = function["param_types"][i].strip()

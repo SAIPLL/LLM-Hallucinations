@@ -72,6 +72,7 @@ PRIMITIVE_RULES = {
     'integral-part': BuiltinRule('[0-9] | [1-9] ' + _up_to_15_digits, []),
     'number'       : BuiltinRule('("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space', ['integral-part', 'decimal-part']),
     'integer'      : BuiltinRule('("-"? integral-part) space', ['integral-part']),
+    'op-expr'      : BuiltinRule('ortest',[]),
     'value'        : BuiltinRule('object | array | string | number | bool | null | none', ['object', 'array', 'string', 'number', 'bool', 'null', 'none']),
     'object'       : BuiltinRule('"{" space ( string ":" space value ("," space string ":" space value)* )? "}" space', ['string', 'value']),
     'array'        : BuiltinRule('"[" space ( value ("," space value)* )? "]" space', ['value']),
@@ -584,7 +585,7 @@ class SchemaConverter:
                 if prop_name not in elements_with_ref:
                     prop_kv_rule_names[prop_name] = self._add_rule(
                         f'{name}{"-" if name else ""}{prop_name}-kv',
-                        f'({json.dumps(prop_name)} space "=" space)? ( {prop_rule_name} | op-expr  | name )'
+                        f'({json.dumps(prop_name)} space "=" space)? ( {prop_rule_name} | name )'
                     )
                     #rule_in_case = self._add_rule(prop_rule_name, "value" )
         
@@ -597,7 +598,7 @@ class SchemaConverter:
             value_rule = self.visit({} if additional_properties == True else additional_properties, f'{sub_name}-value')
             prop_kv_rule_names["*"] = self._add_rule(
                 f'{sub_name}-kv',
-                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | op-expr | name )'
+                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | name )'
             )
             optional_props.append("*")
 
