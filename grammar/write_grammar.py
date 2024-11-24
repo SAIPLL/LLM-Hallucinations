@@ -158,7 +158,7 @@ def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',module
 		library_rules = [library_dict[k]["library"] for k in library_dict.keys()]
 		c_rules = []
 		# Create negations
-		c_rules.append(f"class-name ::= {negate_alias_name(alias, name, add_dot=False)} \n")
+		c_rules.append(f"class-name ::= ( {negate_alias_name(alias, name, add_dot=False)} )+ \n")
 		if len(library_rules) > 1:
 			c_rules.append(f"library ::= ( {'|'.join(library_rules)} more-space ) \n")
 		else:
