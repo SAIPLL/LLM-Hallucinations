@@ -14,26 +14,33 @@ def get_schema(url, alias, name):
 		schema = json.load(f)
 	return get_grammar(url=url, schema=schema, alias=alias, name=name)
 
-def negate_alias_name(alias="", name=""):
+def negate_alias_name(alias="", name="", add_dot=False):
 	"""
 		Negates an alias correctly and adds these
 		rules to the connection rules
 	"""
-	rules = []
-	# Add negation of module name
-	rules.append(
-		f'( \"{name}\" [^.] ) \n'
-	)
-	# Add correct negation of alias
-	non_alias_rule = []
-	alias_dot = alias + "."
-	for i in range(1, len(alias_dot) + 1):
-		alias_format = f' \"{alias_dot[:i-1]}\" [^{alias_dot[i-1:i]}] '
-		non_alias_rule.append(alias_format)	
-	rules.append(
-			f'( ' + " | ".join(non_alias_rule) + " ) \n"
-	)
-	return rules
+	words = alias + name
+	dct_negations = {}
+	for w in words:
+		if add_dot:
+			alias_dot = w + "."
+		else: 
+			alias_dot = w
+		for i in range(1, len(alias_dot) + 1):
+			l_rule = f'\"{alias_dot[:i-1]}\"'
+			r_rule = f'{alias_dot[i-1:i]}'
+			if l_rule not in dct_negations:
+				dct_negations[l_rule] = set(r_rule)
+			else:
+				dct_negations[l_rule] = dct_negations[l_rule].union(set(r_rule))
+	rule = "( "
+	if not add_dot:
+		dct_negations[f'""'] = dct_negations[f'""'].union(set(["."]))
+	for k,v in dct_negations.items():
+		rule += f'{k} [^{"".join(v)}] | '
+	rule = rule[:-3]
+	rule += " )"
+	return rule
 
 def belongs_list(file_function, lst_filter):
 	"""
@@ -109,8 +116,7 @@ def run_write_schema(lst_function, alias, name, file_path, lst_filter, library_d
 		schema_global._rules.pop('lib-inits')
 	# Adds the root rule
 	library_dict[name] = { 
-		"library" : library_dict[name]['library'],
-		"root" : f" ( ( {' | '.join(negate_alias_name(alias, name))} ) | {library_dict[name]['library']} )"
+		"library" : library_dict[name]['library']
 	}
 
 	# Append new grammar lines from the listed functions
@@ -150,16 +156,14 @@ def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',module
 	with open(copy_file_path, 'a') as copy_file:
 		# Add connector rules to file
 		library_rules = [library_dict[k]["library"] for k in library_dict.keys()]
-		root_rules = [library_dict[k]["root"] for k in library_dict.keys()]
 		c_rules = []
+		# Create negations
+		c_rules.append(f"class-name ::= {negate_alias_name(alias, name, add_dot=False)} \n")
 		if len(library_rules) > 1:
-			c_rules = [f"library ::= ( {'|'.join(library_rules)} ) \n "]
+			c_rules.append(f"library ::= ( {'|'.join(library_rules)} more-space ) \n")
 		else:
-			c_rules = [f"library ::= ( {library_rules[0]} ) \n "]
-		if len(root_rules) > 1:
-			c_rules.append(f"root ::= ( {'|'.join(root_rules)} )+")
-		else:
-			c_rules.append(f"root ::= ( {root_rules[0]} )+")
+			c_rules.append(f"library ::= ( {library_rules[0]} ) \n")
+		c_rules.append(f"root ::= ( {negate_alias_name(alias, name, add_dot=True)} | library )+ \n")
 
 		copy_file.writelines(c_rules)
 
@@ -184,11 +188,11 @@ if __name__ == '__main__':
 	parser.add_argument("--lst-namespace", help="File containing a list of modules to filter.")
 
 	args = parser.parse_args()
-	if args.alias_file != "":
+	if args.alias_file:
 		alias_lst = read_file(args.alias_file)
 	else:
 		alias_lst = args.alias
-	if args.name_file != "":
+	if args.name_file:
 		name_lst = read_file(args.name_file)
 	else:
 		name_lst = args.name

@@ -117,7 +117,6 @@ class SchemaConverter:
         self._dotall = dotall
         self._raw_pattern = raw_pattern
         self._rules = {
-            'space': SPACE_RULE,
         }
         self._refs = {}
         self._refs_being_resolved = set()
@@ -421,7 +420,7 @@ class SchemaConverter:
         elif 'enum' in schema:
             if schema['enum'][0] != "":
                 enum_arr = schema['enum'] + [""]
-                rule = ' | '.join(self._generate_constant_rule(v) for v in enum_arr)
+                rule = ' | '.join(self._generate_constant_rule(v.replace("'","")) for v in enum_arr)
                 return self._add_rule(rule_name, rule)
             return
 
@@ -539,12 +538,6 @@ class SchemaConverter:
         name = name.lower()
         rule_name = rule_name.lower()
         rule = ""
-        #if real_name == "nobody_uid":
-            #print(name)
-            #print(real_name)
-            #print(built_rule)
-            #print(init_object)
-            #print(rule)
 
         if len(properties) == 0:
             if built_rule == "":
@@ -565,7 +558,7 @@ class SchemaConverter:
             if real_name == self.name and built_rule == "":
                 rule_attributes = self._add_rule(
                      f'{name}-const', 
-                    f"( {' | '.join(json.dumps(prop) for prop in props_without_refs)} more-space )"
+                    f"(  ( {' | '.join(json.dumps(prop) for prop in props_without_refs[:-1])} ) more-space )"
                 )
             elif init_object:
                 rule_attributes = self._add_rule(
@@ -591,7 +584,7 @@ class SchemaConverter:
                 if prop_name not in elements_with_ref:
                     prop_kv_rule_names[prop_name] = self._add_rule(
                         f'{name}{"-" if name else ""}{prop_name}-kv',
-                        f'({json.dumps(prop_name)} space "=" space)? ({prop_rule_name} | class-object  | name )'
+                        f'({json.dumps(prop_name)} space "=" space)? ( {prop_rule_name} | op-expr  | name )'
                     )
                     #rule_in_case = self._add_rule(prop_rule_name, "value" )
         
@@ -604,16 +597,16 @@ class SchemaConverter:
             value_rule = self.visit({} if additional_properties == True else additional_properties, f'{sub_name}-value')
             prop_kv_rule_names["*"] = self._add_rule(
                 f'{sub_name}-kv',
-                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | class-object | name )'
+                self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | op-expr | name )'
             )
             optional_props.append("*")
 
         if ((real_name != self.name) and (real_name != self.name.split('.')[-1])) or ((real_name == self.name) and not init_object):
             if built_rule == "" and real_name != "__builtins__":
                 rule = f"\"{real_name}\" "
-                if init_object:
-                    rule += ' ( '
-                rule += f"\"(\" "
+                #if init_object:
+                    #rule += ' ( '
+                rule += f"\"(\" space "
                 rule += ' "," space '.join(prop_kv_rule_names[k] for k in required_props if k in prop_kv_rule_names)
 
                 if optional_props:
@@ -649,10 +642,10 @@ class SchemaConverter:
                     
                     rule += ' )?'
                 
-                rule += ' ")"'
+                rule += ' space ")"'
 
-                if init_object:
-                    rule += ' )?'
+                #if init_object:
+                    #rule += ' )?'
             else:
                 rule = f"\"{built_rule}\""
 

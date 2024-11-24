@@ -162,6 +162,7 @@ def inspect_class(f):
 
     return class_to_methods
 
+
 def add_types(anns):
     l = []
     for t in anns:
@@ -248,6 +249,7 @@ def extract_function(f, ret, name, clazz=None, mod=None):
     ret['module'] = mod
     ret['function'] = name
 
+
 def add_constants(module, scoping_mod):
     """
         Get the constants of the library
@@ -275,14 +277,27 @@ def add_constants(module, scoping_mod):
         }
     add_to_method_desc(scoping_mod + '.constant' , ret)
 
+    # Add built-in if missing
+    ret = {
+        'module': scoping_mod,
+        'klass': scoping_mod,
+        'function':'__builtins__',
+        'function_docstring': "built-in in the library",
+        "param_map": {
+
+        }
+    }
+    add_to_method_desc(scoping_mod + '.builtin' , ret)
+
 
 def inspect_module_sub_package(module, mod, scoping_mod, all_classes, is_base = False):
     modules = inspect_all(module)
     #m = inspect.getmembers(module, inspect.isfunction)
     m = []
     for x_name, x in inspect.getmembers(module):
-        if "func" in str(x):
-            m.append(tuple([x_name, x]))
+        if x:
+            if "func" in str(x):
+                m.append(tuple([x_name, x]))
 
     for function in m:
         ret = {}
@@ -294,8 +309,9 @@ def inspect_module_sub_package(module, mod, scoping_mod, all_classes, is_base = 
     for _, classes in modules.items():
         for c in classes:
             for clazz, methods in c.items():
-                if get_class_name(str(clazz)).split('.')[0] != scoping_mod.split('.')[0]:
-                    x = get_class_name(str(clazz)).split('.')[0]
+                if get_class_name(str(clazz)):
+                    if get_class_name(str(clazz)).split('.')[0] != scoping_mod.split('.')[0]:
+                        x = get_class_name(str(clazz)).split('.')[0]
                 else:
                     x = mod
 
@@ -332,17 +348,18 @@ def inspect_module_sub_package(module, mod, scoping_mod, all_classes, is_base = 
 
                 # in cases like RandomForestClassifier, the scoping mod is different from the actual class name
                 # need to add a reference to this class as well
-                if scoping_mod != get_class_name(str(clazz))[0:-1]:
-                    ret = {}
-                    ret['module'] = mod
-                    cname = scoping_mod + '.' + get_class_name(str(clazz)).split('.')[-1]
-                    all_classes[cname] = 1
-                    ret['klass'] = cname
-                    ret['base_classes'] = [get_class_name(str(c)) for c in clazz.__bases__]
-                    if isinstance(class_doc, str):
-                        ret['class_docstring'] = class_doc
-                    add_to_method_desc(cname, ret)
-                    additional_class_names.append(cname)
+                if get_class_name(str(clazz)):
+                    if scoping_mod != get_class_name(str(clazz))[0:-1]:
+                        ret = {}
+                        ret['module'] = mod
+                        cname = scoping_mod + '.' + get_class_name(str(clazz)).split('.')[-1]
+                        all_classes[cname] = 1
+                        ret['klass'] = cname
+                        ret['base_classes'] = [get_class_name(str(c)) for c in clazz.__bases__]
+                        if isinstance(class_doc, str):
+                            ret['class_docstring'] = class_doc
+                        add_to_method_desc(cname, ret)
+                        additional_class_names.append(cname)
 
                 for method in methods:
                     def add_method(m, c):
@@ -356,8 +373,6 @@ def inspect_module_sub_package(module, mod, scoping_mod, all_classes, is_base = 
                     add_method(m, get_class_name(str(clazz)))
                     for c in additional_class_names:
                         add_method(m, c)
-
-
 
 
 def create_returns_map(return_map, func, clazz):
@@ -561,39 +576,28 @@ def main():
         inspect_module_sub_package(package, p.strip(), p.strip(), all_classes, True)
 
         if hasattr(package, '__path__'):
+            # This is a submodule
             for importer, modname, ispkg in pkgutil.walk_packages(path=package.__path__,
                                                                   prefix=package.__name__ + '.',
                                                                   onerror=lambda x: print(x)):
                 try:
                     if '.tests.' in modname:
                         continue
-                    if "tensorflow" not in modname or "torch" not in modname:
+                    if modname not in sys.modules:
                         module = importer.find_module(modname).load_module(modname)
-                        inspect_module_sub_package(module, p.strip(), modname, all_classes)
-                    else:
-                        # Tensorflow and torch are locked to re-import the module
-                        try:
-                            mm = importer.find_module(modname)
-                            if module:
-                                module = mm.load_module(modname)
-                        except:
-                            print(modname)
-                        try:
-                            inspect_module_sub_package(module, p.strip(), modname, all_classes)
-                        except:
-                            print(modname)
+                    inspect_module_sub_package(module, p.strip(), modname, all_classes)
                 except:
                     exc_type, exc_value, exc_traceback = sys.exc_info()
                     print("*** error: print_tb:")
                     traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
                     pass
         else:
+            # This is a builtin
             for modname in dir(package):
                 try:
                     if '.tests.' in modname:
                         continue
                     inspect_module_sub_package(package, modname, modname, all_classes)
-
                 except:
                     exc_type, exc_value, exc_traceback = sys.exc_info()
                     print("*** error: print_tb:")
