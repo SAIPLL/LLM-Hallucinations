@@ -149,7 +149,6 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
         composition_rule: parent rule of this function
     """
     file_to_save = f"{path}/{function_name}.json"
-    print(file_to_save)
     json_schema = {
         "type": "object",
         "title": function_name,
@@ -162,6 +161,8 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
     }
     # 1. Fill properties
     # 2. Save types for future use
+    time_optional = 0
+    time_default = 0
     if "param_map" in function:
         for k, v in function["param_map"].items():
             k_name = k.split(":")[0]
@@ -196,16 +197,24 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
                     if "optional" in function["param_map"][k]:
                         if  function["param_map"][k]["optional"] == False:
                             json_schema["required"].append(k_name)
+                            time_optional = time_optional+1
                     # This is to be changed maybe
                     elif ('default ''' in param_type_info):
                         json_schema["required"].append(k_name)
+                        time_optional = time_optional+1
                     elif ('optional' not in param_type_info):
                         json_schema["required"].append(k_name)
+                    else:
+                        time_optional = time_optional+1
 
                 else:
                     json_schema["properties"][k_name] = {
                             "type": ["value"]
                     }
+        # If everything is required, because of default, save just the first var a required
+        if time_optional == 0:
+            if len(json_schema["required"]) > 0:
+                json_schema["required"] = json_schema["required"][:1]
     elif "param_names" in function:
         for i in range(0, len(function["param_names"])):
             param_name = function["param_names"][i].split(':')[0]
@@ -238,11 +247,17 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
                     param_t_str = [param.strip() for param in sep_type]
                     if 'None' not in param_t_str:
                         json_schema["required"].append(param_name)
-    elif "function_docstring" in function:
+                    else:
+                        time_default = time_default + 1
+        # If everything is required, because of default, save just the first var a required
+        if time_default == 0:
+            if len(json_schema["required"]) > 0:
+                json_schema["required"] = json_schema["required"][:1]
+    elif "function_docstring" in function and function["function_docstring"] is not None:
         json_schema = find_docstring_params(function["function"], function["function_docstring"], json_schema)
-    elif "class_docstring" in function:
+    elif "class_docstring" in function and function["class_docstring"] is not None:
         json_schema = find_docstring_params(function_name, function["class_docstring"], json_schema)
-    
+
     # Add return type if any
     if function_name == "__init__":
         json_schema["return"] = ""
