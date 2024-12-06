@@ -35,7 +35,7 @@ def negate_alias_name(alias="", name="", add_dot=False):
 				dct_negations[l_rule] = dct_negations[l_rule].union(set(r_rule))
 	rule = "( "
 	if not add_dot:
-		dct_negations[f'""'] = dct_negations[f'""'].union(set(["."]))
+		dct_negations[f'""'] = dct_negations[f'""'].union(set([".","=",",","["," ","(",")","'","\"","{","}","+","-","&","*","@","/","%","^","|","<",">","#"]))
 	for k,v in dct_negations.items():
 		rule += f'{k} [^{"".join(v)}] | '
 	rule = rule[:-3]
@@ -108,8 +108,8 @@ def run_write_schema(lst_function, alias, name, file_path, lst_filter, library_d
 	schema_global.format_lib()
 	# Pop rules from global_schema and adds them to dictionary
 	if 'lib-builtins' in schema_global._rules:
-		if name != "tensorflow":
-			library_dict = add_library_connector(name, schema_global._rules["lib-builtins"], library_dict)
+		#if name != "tensorflow":
+		library_dict = add_library_connector(name, schema_global._rules["lib-builtins"], library_dict)
 		schema_global._rules.pop('lib-builtins')
 	if 'lib-inits' in schema_global._rules:
 		library_dict = add_library_connector(name, schema_global._rules["lib-inits"], library_dict)
@@ -160,7 +160,7 @@ def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',module
 		# Create negations
 		c_rules.append(f"class-name ::= ( {negate_alias_name(alias, name, add_dot=False)} )+ \n")
 		if len(library_rules) > 1:
-			c_rules.append(f"library ::= ( {'|'.join(library_rules)} more-space ) \n")
+			c_rules.append(f"library ::= ( {'|'.join(library_rules)} ) \n")
 		else:
 			c_rules.append(f"library ::= ( {library_rules[0]} ) \n")
 		c_rules.append(f"root ::= ( {negate_alias_name(alias, name, add_dot=True)} | library )+ \n")

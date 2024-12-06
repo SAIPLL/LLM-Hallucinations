@@ -1,0 +1,21 @@
+results = np.tan()
+
+results = np.tan(out=y,where=y,kwargs=z)
+
+results = np.tan(where=y,kwargs=z)
+
+results = np.tan(kwargs=z)
+
+results = np.tan(x=z, out=y, where=y)
+
+results = np.tan(a, b, c)
+
+results = np.tan(kwargs, x=z)
+
+results = np.tan(kwargs=x, x=z)
+
+results = np.tan(kwargs=x, out=y, x=z)
+
+results = np.tan(where=x, out=y, x=z)
+
+results = np.tan(x=x,out=y,where=y,kwargs=z,x,x)

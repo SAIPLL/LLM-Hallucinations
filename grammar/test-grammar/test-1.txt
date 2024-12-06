@@ -1,0 +1,6 @@
+# something
+return np.nan
+import pandas as pd
+b = np.zeros((len(a), a.max()+1, np.nan), dtype=int)
+np.nan#hello
+b[np.arange(len(a)), a] = 1

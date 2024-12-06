@@ -1,0 +1,7 @@
+ab = torch.cat([a, b], 0)
+
+ab = torch.cat((a,b),dim=0)
+
+idx = torch.argmax(softmax_output, dim=1)
+
+tensor_of_tensors = torch.stack(list_of_tensors, dim=0)

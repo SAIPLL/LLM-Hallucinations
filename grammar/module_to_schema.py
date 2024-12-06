@@ -29,17 +29,20 @@ def return_types(type_str):
     return_lst = []
     for chosen_type in full_type:
         if chosen_type.startswith('int'):
-                return_lst.append('integer')
+            return_lst.append('integer')
         elif chosen_type.startswith('str'):
-                 return_lst.append('string')
+            return_lst.append('string')
         elif chosen_type.startswith('list'):
-                 return_lst.append('array')
+            return_lst.append('array')
         elif chosen_type.startswith('bool'):
-                 return_lst.append('bool')
+            return_lst.append('bool')
         elif chosen_type.startswith('float'):
-                 return_lst.append('number')
+            return_lst.append('number')
         elif chosen_type.startswith('dict'):
-                 return_lst.append('object')
+            return_lst.append('object')
+        elif chosen_type.startswith('func'):
+            # This is considered with name
+            return_lst.append('name')
         else:
              return (['op-expr'], full_type)
     return (return_lst, full_type)
@@ -62,6 +65,7 @@ def create_enum(type_str):
         final_items = [element.strip() for item in items for element in re.split(r'[/]|\s+or\s+', item)]
         standarize_items = [item.replace('\"', '\'') for item in final_items]
         standarize_items = [item.replace('`', '\'') for item in standarize_items]
+        standarize_items = [item.replace('or ', '') for item in standarize_items]
         if standarize_items == ["0-9"]:
             return [f'{i}' for i in range(0, 10)]
         return standarize_items
@@ -78,9 +82,13 @@ def add_ref(path, function_name, composition_rule='__init__'):
     """
     file_construct = f"{path}/{composition_rule}.json"
     # Read file
-    with open(file_construct, 'r') as file:
-        data = json.load(file)
-    file.close()
+    try:
+        with open(file_construct, 'r') as file:
+            data = json.load(file)
+        file.close()
+    except:
+        print(f'Error: {file_construct}')
+        return
     # Add reference
     add_f = True
     for prop, v in data["properties"].items():
@@ -176,12 +184,26 @@ def build_json(path, function_name, function, composition_rule, kwargs, module_n
             else:
                 if 'type' in function["param_map"][k]:
                     param_type_info = function["param_map"][k]['type']
-                    if "{" not in param_type_info:
+                    if "{'" not in param_type_info:
                         t = param_type_info.split(',')
                         final_type = return_types(t)
-                        json_schema["properties"][k_name] = {
-                            "type": return_types(t)[0]
-                        }
+                        is_enum = return_types(t)[0] == ["string","name"] or return_types(t)[0] == ["string"]
+                        if is_enum and 'param_doc' in function["param_map"][k]:
+                            # Try to find all strings for enum
+                            all_strings = re.findall(r"'(.*?)'", function["param_map"][k]['param_doc'])
+                            if len(all_strings) > 0:
+                                all_strings = [s.replace("'", "\"") for s in all_strings]
+                                json_schema["properties"][k_name] = {
+                                    "enum": all_strings
+                                }
+                            else:
+                                json_schema["properties"][k_name] = {
+                                    "type": return_types(t)[0]
+                                }
+                        else:
+                            json_schema["properties"][k_name] = {
+                                    "type": return_types(t)[0]
+                            }
                     else:
                         # Create dictionary enum
                         lst_enum = create_enum(param_type_info)
@@ -395,7 +417,7 @@ def consider_function(func_str):
         lst_functions = func_str.split('.')
         return True, lst_functions[-1], '.'.join(lst_functions[0:-1])
 
-def convert_data_to_schema(module, file_path, kwargs):
+def convert_data_to_schema(module, file_path, kwargs, starts=True):
     """
         module: name of the module to transform
     """
@@ -414,13 +436,15 @@ def convert_data_to_schema(module, file_path, kwargs):
         for root, dirs, files in os.walk(module):
             # Create a file for each directory
             dir_name = os.path.basename(root)
-            output_file_path = os.path.join(root, f'{dir_name}.txt')
-            with open(output_file_path, 'w') as file:
-                for name in files:
-                    if '.json' in name:
-                        file_path = os.path.join(root, name)
-                        file.write(file_path + '\n')
-                        file_one.write(file_path + '\n')
+            if starts:
+                if dir_name.startswith(module):
+                    output_file_path = os.path.join(root, f'{dir_name}.txt')
+                    with open(output_file_path, 'w') as file:
+                        for name in files:
+                            if '.json' in name:
+                                file_path = os.path.join(root, name)
+                                file.write(file_path + '\n')
+                                file_one.write(file_path + '\n')
 
     # Global file
     global_file_path = f"{module}.txt"
@@ -430,11 +454,12 @@ def convert_data_to_schema(module, file_path, kwargs):
 if __name__ == "__main__":
     """ Execute modules' jsons into schema """
     """ Example usage: python grammar/module_to_schema.py --module='pandas' --file='pandas.json' --kwargs=False"""
-    """ Example usage: python grammar/module_to_schema.py --module='numpy' --file='Data/graph4code/output/modules_out/numpy/numpy.json' --kwargs=False """
+    """ Example usage: python grammar/module_to_schema.py --module='numpy' --file='Data/graph4code/output/modules_out/numpy/numpy.json' --kwargs=True --starts=True """
     parser = argparse.ArgumentParser(description="Transform module to json schema.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--module", help="Name of the module to transform.")
     parser.add_argument("--file", help="Path to the json file.")
     parser.add_argument("--kwargs", help="Add kwargs as parameter.")
+    parser.add_argument("--starts", help="Only add files that start with the same name as the module.")
 
     args = parser.parse_args()
-    convert_data_to_schema(args.module, args.file, eval(args.kwargs))
+    convert_data_to_schema(args.module, args.file, eval(args.kwargs), eval(args.starts))

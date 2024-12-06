@@ -1,0 +1,1 @@
+agg_row = pd.DataFrame({'value': [large_df['value'].mean()]}, index=['X'])

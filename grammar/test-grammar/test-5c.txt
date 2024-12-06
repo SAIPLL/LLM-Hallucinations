@@ -1,0 +1,1 @@
+np.pad(A, (0, length - len(A)), modex = 'constant')

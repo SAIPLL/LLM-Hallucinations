@@ -1,0 +1,1 @@
+df = pd.DataFrame({'str': ['Aa', 'Bb', '?? ?', '###', '{}xxa;’]})

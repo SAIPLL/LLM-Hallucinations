@@ -1,0 +1,6 @@
+def reduce_fraction(numerator, denominator):
+    if denominator == 0:
+        return (np.nan, np.nan)
+
+ _, idx = np.unique(a, axis=0, return_index=True)
+result = a[np.sort(idx)]

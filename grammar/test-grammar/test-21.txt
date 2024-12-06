@@ -1,0 +1,1 @@
+df_out = pd.concat([df.iloc[:, :-1], pd.DataFrame(one_hot_encoded, columns=column_names)], axis=1)

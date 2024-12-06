@@ -1,0 +1,2 @@
+accmap % accmap.size
+result = np.bincount(accmap % accmap.size(), weights=a)

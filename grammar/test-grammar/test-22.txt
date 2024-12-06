@@ -1,0 +1,1 @@
+result = pd.concat([pd.DataFrame(list(zip(*t)), columns=a.columns) for t in zip_longest(a.to_numpy(), b.to_numpy(), fillvalue=np.nan)])

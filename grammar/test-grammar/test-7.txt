@@ -1,0 +1,4 @@
+import numpy as np
+mystr = "100110"
+
+result = np.array(list(mystr)).astype(int)

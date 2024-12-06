@@ -1,0 +1,76 @@
+op-expr ::= ortest
+ortest ::= andtest (space "or" space andtest)*
+andtest ::= nottest (space "and" space nottest)*
+nottest ::= (space "not" space nottest | comparison )
+comparison ::= expr (space compop space expr)*
+compop ::= ( "<" | ">" | "==" | ">=" | "<=" | "<>" | "!=" | "in" | " not in " | " is " | " is not " )
+expr ::= xorexpr ( space "|" space xorexpr)*
+xorexpr ::= andexpr (space "^" space andexpr)*
+andexpr ::= shiftexpr (space "&" space shiftexpr)*
+shiftexpr ::= arithexpr ( space ( "<<" | ">>" ) space arithexpr)*
+arithexpr ::= term ( space ( "+" | "-" ) space term)*
+term ::= factor ( space ( "*" | "@" | "/" | "%" | "//" ) space factor)*
+factor ::= ( "+" | "-" | "~" ) factor | power
+power ::= atom-expr (space "**" space factor)?
+
+starexpr ::= "*" expr
+
+atom-expr ::= ("await" space)? ( space ( value trailer* | library | name trailer-func* | class-name trailer+ ) space )
+
+trailer ::= ( "(" arglist? ")" | "[" subscriptlist "]" | "." name )
+
+trailer-func ::= ( "(" arglist? ")" | "[" subscriptlist "]" )
+
+value ::= ( tuple | array | object | number | string | "..." | "None" | bool | "null" | "f" string ) space
+
+name ::= [a-zA-Z_] [a-zA-Z_0-9]*
+
+bool ::= ( "True" | "False" )
+
+quote ::= ( "'" | "\"" )
+string ::= quote char* quote
+char ::= [^"\\'] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+
+number ::= ("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)?
+decimal-part ::= [0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integral-part ::= [0-9] | [1-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integer ::= ("-"? integral-part) space
+
+object ::= "{" space dictorsetmaker? space "}"
+
+array ::= "[" space testlist-comp? space "]"
+
+tuple ::= "(" space testlist-comp? space ")"
+
+dictorsetmaker ::= ( ( kvpair-double ( comp-for | ( ( "," space kvpair-double)* space ","? space ) ) ) | testlist-comp )
+
+kvpair-double ::= ( ( test space ":" space test ) | "**" expr )
+
+testlist-comp ::= ( test | starexpr ) ( comp-for | ("," space (test | starexpr) )* ("," space)? )
+comp-iter ::= ( comp-for | comp-if )
+comp-if ::= "if" space ortest
+comp-for ::= ("async" space)? "for" space exprlist space "in" space ortest ( space comp-iter )*
+exprlist ::= ( expr | starexpr ) ( "," space ( expr | starexpr ) )* ( "," space )?
+
+varargslist ::= ( varname | starmandatory | doublestartuple )
+
+varname ::= name-argument ("," space name-argument)* ( "," space ( starmandatory | doublestartuple )? )?
+
+varargskwargs ::= ("," space doublestartuple?)?
+doublestartuple ::= "**" name ","?
+starmandatory ::= "*" name? ( "," space name-argument )* varargskwargs
+
+test ::= ( ortest ("if" ortest "else" test)? | lambdef )
+lambdef ::= "lambda" varargslist? space ":" space test
+
+arglist ::= argument ("," space argument)* ( "," space )?
+argument ::= ( test comp-for? | name-argument | "**" test | "*" test )
+subscriptlist ::= subscriptt ("," space subscriptt)* ","?
+subscriptt ::= ( test | ":" test? )*
+name-argument ::= name (space "=" space test)?
+
+kwargs ::= op-expr
+valid-ops ::= ( "+" | "-" | "&" | "*" | "@" | "/" | "%" | "^" | "|" | "<" | ">" | "!")
+more-space ::= ( " " | "\n" | "," | "\t" | ")" | "]" | "#" | valid-ops )
+space ::= ( [ \t\n]* )
+endmarker ::= ""

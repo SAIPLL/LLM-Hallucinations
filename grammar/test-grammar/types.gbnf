@@ -1,0 +1,82 @@
+op-expr ::= ortest
+
+ortest ::= andtest (space "or" space andtest)*
+andtest ::= nottest (space "and" space nottest)*
+nottest ::= (space "not" space nottest | comparison )
+comparison ::= expr (space compop space expr)*
+compop ::= ( "<" | ">" | "==" | ">=" | "<=" | "<>" | "!=" | "in" | " not in " | " is " | " is not " )
+starexpr ::= "*" expr
+expr ::= xorexpr ( space "|" space xorexpr)*
+xorexpr ::= andexpr (space "^" space andexpr)*
+andexpr ::= shiftexpr (space "&" space shiftexpr)*
+shiftexpr ::= arithexpr ( space ( "<<" | ">>" ) space arithexpr)*
+arithexpr ::= term ( space ( "+" | "-" ) space term)*
+term ::= factor ( space ( "*" | "@" | "/" | "%" | "//" ) space factor)*
+factor ::= ( "+" | "-" | "~" ) factor | power
+power ::= value (space "**" space factor)?
+
+name ::= [a-zA-Z_] [a-zA-Z_0-9]*
+array ::= "[" space ( op-expr (","? space op-expr)* )? "]" space
+bool ::= ("True" | "False") space
+char ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+decimal-part ::= [0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integral-part ::= [0-9] | [1-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integer ::= ("-"? integral-part) space
+null ::= "null" space
+none ::= "None" space
+quote ::= ( "'" | "\"" )
+number ::= ("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space
+object ::= "{" space string ":" space op-expr ("," space string ":" space op-expr)*  "}" space
+space ::= ( [ \t\n]* )
+subscript-name ::= [a-zA-Z_] [a-zA-Z_0-9]* (trailer-wd)*
+string ::= quote char* quote space
+class ::= class-name (trailer)+
+trailer-wd ::= "[" subscriptlist "]" | "(" (subscriptlist)? ")"
+trailer ::= "[" subscriptlist "]" | "." name | "(" (subscriptlist)? ")"
+subscriptlist ::= op-expr ("," space op-expr )*
+tuple ::= "(" op-expr  ","  space op-expr ")"
+value ::= ( object | array | string | number | bool | null | none | tuple | "::" ) space
+kwargs ::= op-expr
+more-space ::= ( " " | "\n" | "," | "\t" | ")" | "]" | "[" subscriptlist "]" )
+
+class-name ::= ( "" [^np.=,] | "n" [^up] | "p" [^da] | "nu" [^m] | "num" [^p] | "nump" [^y] | "pa" [^n] | "pan" [^d] | "pand" [^a] | "panda" [^s]  )+
+
+lib-rule ::= np-numpy-tan-final
+
+np-numpy-tan ::= "np.tan"  ( "(" space ( ( np-numpy-tan-x-kv np-numpy-tan-x-rest )? | ( np-numpy-tan-out-kv  np-numpy-tan-out-rest )? | ( np-numpy-tan-where-kv  np-numpy-tan-where-rest )? | ( np-numpy-tan-kwargs-kv np-numpy-tan-kwargs-rest)? ) space ")" )?
+
+np-numpy-tan-x-kv ::= ("x" space "=" space)? ( np-np-numpy-tan-x | name )
+np-numpy-tan-x-rest ::= ( np-numpy-tan-out-kv )? np-numpy-tan-out-rest
+np-np-numpy-tan-x ::= op-expr
+
+np-numpy-tan-out-kv ::= ("out" space "=" space)? ( np-np-numpy-tan-out | name )
+np-numpy-tan-out-rest ::= ( "," space np-numpy-tan-where-kv )? np-numpy-tan-where-rest | ( "," space np-numpy-tan-x-kv )? ( np-numpy-tan-x-rest )?
+np-np-numpy-tan-out ::= op-expr
+
+np-numpy-tan-where-kv ::= ("where" space "=" space)? ( np-np-numpy-tan-where | name )
+np-numpy-tan-where-rest ::= ( "," space np-numpy-tan-kwargs-kv )? ( "," space np-numpy-tan-x-kv )? | ( np-numpy-tan-x-rest )?
+np-np-numpy-tan-where ::= op-expr
+
+np-numpy-tan-kwargs-kv ::= ("kwargs" space "=" space)? ( np-np-numpy-tan-kwargs | name )
+np-numpy-tan-kwargs-rest ::=  ( "," space np-numpy-tan-x-kv )? ( np-numpy-tan-out-kv )? ( np-numpy-tan-out-rest )?
+np-np-numpy-tan-kwargs ::= kwargs
+
+
+np-numpy-tan-final ::= "np.tan" "(" space  (np-numpy-tan-x-kv np-numpy-tan-x-rest | np-numpy-tan-out-kv np-numpy-tan-out-rest | np-numpy-tan-where-kv np-numpy-tan-where-rest | np-numpy-tan-kwargs-kv np-numpy-tan-kwargs-rest )? space ")"
+np-numpy-tan-kwargs-kv ::= ("kwargs" space "=" space)? ( np-np-numpy-tan-kwargs | name )
+np-numpy-tan-kwargs-left ::= "," space ( np-numpy-tan-x-kv np-numpy-tan-x-rest | np-numpy-tan-out-kv np-numpy-tan-out-rest | np-numpy-tan-where-kv np-numpy-tan-where-rest )
+np-numpy-tan-kwargs-rest ::=  | ( np-numpy-tan-kwargs-left )?
+np-numpy-tan-out-kv ::= ("out" space "=" space)? ( np-np-numpy-tan-out | name )
+np-numpy-tan-out-left ::= "," space ( np-numpy-tan-x-kv np-numpy-tan-x-rest )
+np-numpy-tan-out-rest ::= ( "," space np-numpy-tan-where-kv )? np-numpy-tan-where-rest | ( np-numpy-tan-out-left )?
+np-numpy-tan-where-kv ::= ("where" space "=" space)? ( np-np-numpy-tan-where | name )
+np-numpy-tan-where-left ::= "," space ( np-numpy-tan-x-kv np-numpy-tan-x-rest | np-numpy-tan-out-kv np-numpy-tan-out-rest )
+np-numpy-tan-where-rest ::= ( "," space np-numpy-tan-kwargs-kv )? | ( np-numpy-tan-where-left )?
+np-numpy-tan-x-kv ::= ("x" space "=" space)? ( np-np-numpy-tan-x | name )
+np-numpy-tan-x-left ::= endmarker
+np-numpy-tan-x-rest ::= ( "," space np-numpy-tan-out-kv )? np-numpy-tan-out-rest | ( np-numpy-tan-x-left )
+
+rule ::= "mode = 'constanty'"
+endmarker ::= ""
+
+root ::= object

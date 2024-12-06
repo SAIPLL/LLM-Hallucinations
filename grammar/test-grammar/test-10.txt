@@ -1,0 +1,4 @@
+~im.all(axis=1)
+rows = np.where(x)[0]
+rows = np.where(~im.all(axis=1))[0]
+
