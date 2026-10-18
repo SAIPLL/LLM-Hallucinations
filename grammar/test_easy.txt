@@ -1,0 +1,7 @@
+import pandas as pd
+
+x = pd.DataFrame([])
+
+plt.show()
+
+plt.tight_layout(pad=2.05, z_pad=0.8)

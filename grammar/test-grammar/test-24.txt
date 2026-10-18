@@ -1,0 +1,1 @@
+x[np.isnan(x)] = np.inf#This will replace all nan values with np.inf.

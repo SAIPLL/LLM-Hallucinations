@@ -1,0 +1,24 @@
+import re
+import os
+import glob
+def task_func(dir_path):
+    if not os.path.exists(dir_path):
+        raise ValueError("Directory does not exist.")
+
+    result = {}
+    pattern = re.compile(r'\b(?i)error\b')  # Case-insensitive pattern for "error"
+
+    # Iterate over all text files in the directory and its subdirectories
+    for file_path in glob.glob(os.path.join(dir_path, '**', '*.txt'), recursive=True):
+        try:
+            with open(file_path, 'r') as file:
+                content = file.read()
+                count = len(pattern.findall(content))  # Count occurrences of "error"
+                if count > 0:
+                    relative_path = os.path.relpath(file_path, dir_path)
+                    result[relative_path] = count
+        except IOError:
+            # Handle any file-related errors (e.g., permission denied)
+            pass
+
+    return result

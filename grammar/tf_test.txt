@@ -1,0 +1,3 @@
+labels = tf.constant(labels)
+result = tf.cast(tf.one_hot(labels, 10), tf.int32)
+result = 1 - result

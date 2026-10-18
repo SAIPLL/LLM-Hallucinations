@@ -1,58 +1,7 @@
 # Hallucinations
 
 The first part of the project brings different benchmarks from which we obtained hallucinated programs from code generation.
-Running those benchmarks (within its environment) and finding the buggy programs along its error messages has represented several changes. These modifications and fixes, from its original, are being tracked in this repository.
-
-## Data
-
-### [DS-1000](https://github.com/xlang-ai/DS-1000)
-
-I have edited ```Data/DS-1000/execution.py``` and ```Data/DS-1000/test_ds1000.py``` to provide more information and format about the error message.
-I have updated ```Data/DS-1000/run_openai.py``` to receive arguments to call the OpenAI API.
-I have included a call to the Anthropic API through this script ```Data/DS-1000/run_claude.py```.
-I have included a call to the Ollama API (running locally) through this script ```Data/DS-1000/run_ollama.py```.
-
-```
-cd Data/DS-1000
-python run_ollama.py
-```
-
-To run ollama with the grammar for a specific library
-
-```
-python run_ollama.py --grammar "True" --library "Numpy"
-```
-For any library:
-```
-python run_ollama.py --grammar "True" --library ""
-```
-
-### [Odex](https://github.com/zorazrw/odex)
-
-I have edited Odex ```Data/odex/nl2code_codex.py``` to work with OpenAI's chat API, as well as Anthropic Messages. As in pass@1 the default `temperature=0.2` and `n=1`. I have skipped the prompts in the dataset that doens't belong to the `"open"` domain.
-
-```
-cd Data/odex
-python nl2code_codex.py --language es --model_name "claude-3-opus-20240229"
-python nl2code_codex.py --language es --model_name "gpt-4-0613"
-python nl2code_codex.py --language es --model_name "gpt-3.5-turbo-0125"
-python nl2code_codex.py --language es --model_name "granite-code:latest"
-python nl2code_codex.py --language es --model_name "granite-code:latest" --grammar True
-```
-
-Run odex re-evaluation.
-
-```
-pip install -r ./library/requirements.txt 
-python ./library/imports.py
-
-python eval_passk.py --language es --prediction_path data/nl2code/claude-3-opus-20240229/es_pred_0-0.json --library_usage "open"
-```
-
-To format the results in odex to work with the validator script.
-```
-python format_odex_validation.py
-```
+Running those benchmarks (within its environment) and finding the buggy programs along its error messages has represented several changes. These modifications and fixes, from its original, are being tracked in the repo [Library-Bench](https://github.com/SAIPLL/Library-Bench.git))
 
 ## KGs
 
@@ -60,24 +9,26 @@ python format_odex_validation.py
 
 Here is the information to load [Graph4Code](https://github.com/wala/graph4code?tab=readme-ov-file#collecting-documentation-docstrings-for-your-scripts).
 
-The original code in graph4code, only works for libraries in pip (ex. matplotlib, numpy...). These code has been moved to ```Data/graph4code/scripts/inspect-modules_for_docstrings_standalone.sh```. You can inspect a module and standard libraries (such as: math or string) using:
+The original code in graph4code, only works for libraries in pip (ex. matplotlib, numpy...). These code has been moved to ```Data/graph4code/scripts/inspect_modules_for_docstrings_standalone.sh```. You can inspect a module and standard libraries (such as: math or string) using:
 
 ```
+cd scripts
 sh inspect_modules_for_docstrings_standalone.sh ../output/top_modules.json ../output/modules_out/ ~/anaconda3/ False
 ```
 
 The last argument is a boolean and indicates whether the library should be downloaded (True, else False). 
 Also, the python scripts have been edited ```Data/graph4code/src/inspect-docstrings_per_module.py``` to store the json file locally without Elasticsearch.
 
-I am providing `top_modules.json` with all the list of libraries required for DS-1000 and Odex.
+I am providing `top_modules_ds.json` with all the list of libraries required for DS-1000 and Odex. While additional BigCodeBench libraries are in `top_modules.json`.
 
 ### Graph4Code to JSON Schema to GBNF
 
 The resulting JSON from GraphGen4code needs to be transform to JSON Schema and then to a grammar of the form GBNF. This is an example for generating the `matplotlib.pyplot` grammar: 
 
 ```
-python grammar/module_to_schema.py --module='matplotlib.pyplot' --file='Data/graph4code/output/modules_out/matplotlib.pyplot/matplotlib.pyplot.json' --kwargs=True
+python grammar/module_to_schema.py --module='matplotlib.pyplot' --file='Data/graph4code/output/modules_out/matplotlib.pyplot/matplotlib.pyplot.json' --kwargs=True --starts=True
 ```
+Note: this heavily depends on `grammar/json_function_to_grammar.py` this is the core code to create the grammar.
 
 ```
 python grammar/write_grammar.py --lst-function='matplotlib.pyplot.txt' --baseline-grammar='grammar/any.gbnf' --alias="['plt']" --name="['matplotlib.pyplot']"
@@ -105,11 +56,18 @@ To set everything for Odex run:
 python grammar/generate_odex_grammar.py
 ```
 
+To set everything for BigCodeBench run:
+```
+python grammar/generate_bigcodebench_grammar.py 
+```
+
+Lists produced by GraphGen4code are contained in `libraries.zip` while `gbnfs.zip` contains the generated grammars `grammar/files/` used by the validator, and filtered with `grammar/odex_grammar_mapping.jsonl` and `grammar/bigcodebench_mapping.json`.
+
 ## Model 
 
 #### [Ollama](https://github.com/ollama/ollama?tab=readme-ov-file#building)
 
-I am using the open-source Ollama framework to run LLMs locally. I have modify Ollama's client API to receive a grammar. This way we can pass the grammar to llama.cpp and constrained the decoder with the specified grammar. This approach let you guide any model being hosted in Ollama.
+I am using the open-source Ollama framework to run LLMs locally. I have [modify Ollama's client API](https://github.com/ollama/ollama/pull/15408) to receive a grammar. This way we can pass the grammar to llama.cpp and constrained the decoder with the specified grammar. This approach let you guide any model being hosted in Ollama.
 
 ``` 
 ./ollama serve 
@@ -123,7 +81,7 @@ To save the ollama's server log with the "Resampling info", I am starting ollama
 
 [More info on how to build a modified Ollama.](https://github.com/ollama/ollama/blob/main/docs/development.md)
 
-#### Validator (Detector)
+#### Grammar Validator (Detector)
 
 ##### [llama.cpp](https://github.com/clarismiranda/llama.cpp/tree/grammar-memo)
 I have made some changes in llama.cpp grammar validator script `examples/llama-gbnf-validator` and its dependencies on `llama-grammar`.
@@ -148,3 +106,24 @@ To validate everything for Odex run:
 cd grammar
 ./validate_odex_grammars.sh
 ```
+
+#### Static tools Validator
+
+##### Type-stubs support
+You can use the list in `top_modules_<benchmark>.json` in the graph4code folder to get the type-stubs for each of the benchmark.
+For example, run `pyright/bigcodebench/create_stub_bigcodebench_third_party.sh` to get the type-stubs for BigCodeBench.
+
+##### Mypy validation
+```
+cd mypy
+./validate_mypy.sh
+```
+
+##### Pyright validation
+```
+cd pyright
+./validate_pyright.sh
+```
+
+
+

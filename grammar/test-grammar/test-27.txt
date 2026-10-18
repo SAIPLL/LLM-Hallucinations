@@ -1,0 +1,9 @@
+# calculate zscore
+zscore_df = df.apply(stats.zscore, axis=1)
+
+# rename index
+df.index = pd.MultiIndex.from_tuples([(i, 'data') for i in df.index])
+zscore_df.index = pd.MultiIndex.from_tuples([(i, 'zscore') for i in zscore_df.index])
+
+# concatenate dataframes
+result = pd.concat([df, zscore_df]).sort_index()

@@ -1,0 +1,9 @@
+{
+  "pythonVersion": "3.10.14",
+  "venvPath": "/Users/amir0532/Documents/LLM-Hallucinations/Data/bigcodebench",    // Path to all Anaconda environments
+  "venv": "bigcode",                        // Name of your environment
+  "reportMissingImports": true,                // Enable warnings for missing imports
+  "reportRedeclaration": false,
+  "include": ["core","api"],            
+  "typeCheckingMode": "standard"              // Type checking mode: 'off', 'basic', or 'strict'
+}

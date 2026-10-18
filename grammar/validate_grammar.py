@@ -10,6 +10,7 @@ import subprocess
 import cProfile
 import pstats
 import concurrent.futures as cfuts
+import time
 from tqdm import tqdm
 
 
@@ -35,6 +36,15 @@ def postprocess(code):
     code = code.replace('<code>', '')
     return code
 
+def clean_code(code):
+    # Define the pattern to match the first occurrence of any of the keywords
+    pattern = r'.*?(?=(\bdef |\bimport |\bfrom ))'
+    
+    # Use regex to remove everything before the first match
+    cleaned_code = re.sub(pattern, '', code, count=1, flags=re.DOTALL)
+    
+    return cleaned_code
+
 def transform_to_one_line(code):
     lines = code.splitlines()  # Split code into individual lines
     result = []  # Store transformed lines
@@ -59,18 +69,34 @@ def transform_to_one_line(code):
     # Join all statements into a single string with proper formatting
     return "\n".join(result)
 
-def write_str_file(file_model, code_info, library_name, is_answer, split_lines=False):
+def write_str_file(file_model, code_info, library_name, is_answer, split_lines=False, test_name="DS"):
 	"""
 		Write the file into a string
 	"""
 	# Write code answer only
 	if is_answer:
-		file_to_write = f"{file_model}_{code_info['id']}"
+		if type(code_info['id']) == str:
+			file_to_write = f"{file_model}_{code_info['id'].replace('/','-')}.py"
+		else:
+			file_to_write = f"{file_model}_{code_info['id']}.py"
 		code = code_info["code"]
 	else:
-		file_to_write = f"{file_model}_{code_info['completion_id']}"
+		file_to_write = f"{file_model}_{code_info['completion_id']}.py"
 		code = code_info["generate_code"]
-	extracted_code = postprocess(code)
+	
+	if test_name != 'bigcodebench':
+		extracted_code = postprocess(code)
+		extracted_code = clean_code(extracted_code)
+		extracted_code = re.sub(r'""".*?"""', '', extracted_code, flags=re.DOTALL)
+	else:
+		remove_sub = ':\n\n    pass'
+		indx = code.find(remove_sub)
+		if indx:
+			indx = indx + len(remove_sub) + 1
+			extracted_code = code[indx:]
+		else:
+			extracted_code = code
+	
 	if split_lines:
 		extracted_code = transform_to_one_line(extracted_code)
 		extracted_code += "\n"
@@ -100,6 +126,7 @@ def get_parse_result(output_str):
 	lines = ""
 	# Find error line
 	error_index = output_str.find("Error:")
+	parse_index = output_str.find("parse")
 	print(output_str)
 	if error_index > 0:
 		# Find error substring
@@ -109,12 +136,14 @@ def get_parse_result(output_str):
 		result = error_line[:eof_idx]
 		if "Unexpected end of input" in result:
 			result = "unexpected"
+	elif parse_index > 0:
+		result = "parse error"
 	else:
 		result = "pass"
 
 	return result, output_str
 
-def check_correctness(file_name, grammar, timeout=12000):
+def check_correctness(file_name, grammar, timeout=12000, sub_process=0):
 	"""
 		Executes the grammar validation of a program
 		Timeout = 900
@@ -123,10 +152,13 @@ def check_correctness(file_name, grammar, timeout=12000):
 	# Path to the C++ binary
 	binary_path = './llama-gbnf-validator'
 	instruction = f'{binary_path} {grammar} {file_name}'
-
+	time_taken = 0
 	try:
+		start = time.time()
 		result_sub = subprocess.run([instruction], stdout=subprocess.PIPE, stderr=None, text=True, shell=True, timeout=timeout)
 		output, lines = get_parse_result(result_sub.stdout)
+		end = time.time()
+		time_taken = end-start
 	except subprocess.TimeoutExpired:
 		# result_sub.kill()
 		output = "timeout"
@@ -138,7 +170,9 @@ def check_correctness(file_name, grammar, timeout=12000):
 	return dict(
 		passed=output,
 		result=lines,
-		completion_id=file_name
+		completion_id=file_name,
+		cid=sub_process,
+		duration=time_taken
 	)
 
 def sequential_evaluate(code_file, model_name, is_answer, library="", test_name="DS", split_lines=False):
@@ -155,16 +189,20 @@ def sequential_evaluate(code_file, model_name, is_answer, library="", test_name=
 	pr.enable()
 	ix = 0
 	for code_test in results:
-		if is_answer:
-			library_name = code_test['metadata']['library']
+		if test_name == 'bigcodebench':
+			lib_col = 'libs'
 		else:
-			library_name = code_test['library']
+			lib_col = 'library' 
+		if is_answer:
+			library_name = code_test['metadata'][lib_col]
+		else:
+			library_name = code_test[lib_col]
 		if library_name == library or library == "":
 			if test_name == "odex":
-				grammar_name = f"files/odex/{code_test['lang']}_{code_test['id']}-atomtest-grammar.gbnf"
+				grammar_name = f"files/odex/{code_test['lang']}_{code_test['id']}-atomimport-grammar.gbnf"
 			else:
-				grammar_name = f"files/{library_name.lower()}-atomtest-grammar.gbnf"
-			file_names_lst = write_str_file(model_name, code_test, library_name, is_answer, split_lines=split_lines)
+				grammar_name = f"files/{library_name.lower()}-atomimport-grammar.gbnf"
+			file_names_lst = write_str_file(model_name, code_test, library_name, is_answer, split_lines=split_lines, test_name=test_name)
 			for file_name in file_names_lst:
 				response = check_correctness(file_name, grammar_name, timeout=12000)
 				cid = response['completion_id']
@@ -179,6 +217,27 @@ def sequential_evaluate(code_file, model_name, is_answer, library="", test_name=
 		for r in validator_results:
 			rf.write(json.dumps(r) + '\n')
 
+def find_grammar_odex(odex_mappings, library_name):
+	lib_str = ','.join(sorted(library_name))
+	for m in odex_mappings:
+		if m["library"] == lib_str:
+			return m["grammar"]
+	return ""
+
+def find_grammar_bigcodebench(bigcodebench_mappings, library_name):
+	lib_str = library_name.replace('[','').replace(']','').replace(' ','').replace('\'','')
+	lib_str = ','.join(sorted(lib_str.split(',')))
+	if lib_str in bigcodebench_mappings:
+		id = bigcodebench_mappings[lib_str]['id']
+		file_grammar = f'files/bigcodebench/{id}-atomimport-grammar.gbnf'
+		return file_grammar
+	return ""
+
+def find_example(odex_example, odex_id):
+	for ex in odex_example:
+		print(ex['id'], odex_id)
+		if str(ex['id']) == str(odex_id):
+			return ex['metadata']['library']
 
 def evaluate_code_grammar(code_file, model_name, is_answer, library, test_name, split_lines=False):
 	"""
@@ -190,28 +249,54 @@ def evaluate_code_grammar(code_file, model_name, is_answer, library, test_name, 
 	results = [json.loads(l) for l in open(code_file, "r")]
 
 	remove_files = []
-	
+
+	odex_mappings = [json.loads(l) for l in open("odex_grammar_mapping.jsonl", "r")]
+
+	odex_example = [json.loads(l) for l in open("../../Library-Bench/odex/data/nl2code/claude-3-opus-20240229/claude-3-opus-20240229-0-answers.jsonl", "r")]
+
+	with open("bigcodebench_mapping.json", "r") as f:
+		bigcodebench_mappings = json.load(f)
+		f.close()
+
+	#print(type(bigcodebench_mappings))
 	validator_results = []
 	with cfuts.ProcessPoolExecutor(
 		max_workers=16
 	) as executor:
 		futs = []
+		ix = 0
 		for code_test in results:
-			if is_answer:
-				library_name = code_test['metadata']['library']
+			if test_name == 'bigcodebench':
+				lib_col = 'libs'
 			else:
-				library_name = code_test['library']
+				lib_col = 'library' 
+			if is_answer:
+				if test_name == 'odex' and model_name in ['gemma2-2b-0', 'qwen3-8b-0']:
+					library_name = find_example(odex_example, code_test['id'])
+				else:
+					if test_name == 'bigcodebench' :
+						library_name = json.loads(code_test['metadata'])[lib_col]
+					else:
+						library_name =  code_test['metadata'][lib_col]
+			else:
+				library_name = code_test[lib_col]
 			
 			if library_name == library or library == "":
 				if test_name == "odex":
-					grammar_name = f"files/odex/{code_test['lang']}_{code_test['id']}-atomtest-grammar.gbnf"
+					grammar_name = find_grammar_odex(odex_mappings, library_name)
+					print(grammar_name)
+					#grammar_name = f"files/odex/{code_test['lang']}_{code_test['id']}-atomimport-grammar.gbnf"
+				elif test_name == 'bigcodebench':
+					grammar_name = find_grammar_bigcodebench(bigcodebench_mappings, library_name)
+					print(grammar_name)
 				else:
-					grammar_name = f"files/{library_name.lower()}-atomtest-grammar.gbnf"
-				file_names_lst = write_str_file(model_name, code_test, library_name, is_answer, split_lines=split_lines)
+					grammar_name = f"files/{library_name.lower()}-atomimport-grammar.gbnf"
+				file_names_lst = write_str_file(model_name, code_test, library_name, is_answer, split_lines=split_lines, test_name=test_name)
 				
 				for file_name in file_names_lst:
 					# you have some options on how to actually execute the program here.
-					futs.append(executor.submit(check_correctness, file_name, grammar_name, timeout=12000))
+					futs.append(executor.submit(check_correctness, file_name, grammar_name, timeout=12000, sub_process=ix))
+			ix = ix + 1
 	
 		for f in tqdm(cfuts.as_completed(futs), total=len(futs)):
 			result = f.result()
@@ -222,6 +307,7 @@ def evaluate_code_grammar(code_file, model_name, is_answer, library, test_name, 
 				result["lines"] = line
 			remove_files.append(cid)
 			validator_results.append(result)
+		
 
 	for file_to_remove in remove_files:
 		remove_tmp_file(file_to_remove)
@@ -232,10 +318,10 @@ def evaluate_code_grammar(code_file, model_name, is_answer, library, test_name, 
 
 if __name__ == '__main__':
 	""" Evaluate code from generative models versus a valid grammar """
-	""" Example usage: python validate_grammar.py --codetest="../Data/DS-1000/data/gpt-4-0613-0-answers.jsonl" --model="gpt-4-0613-0" --answer=True --library="Numpy" --parallel=False """
-	""" Example usage: python validate_grammar.py --codetest="../Data/DS-1000/data/gpt-4-0613-0-answers.jsonl" --model="gpt-4-0613-0" --answer=True --library="" --parallel=True """
-	""" Example usage: python validate_grammar.py --codetest="../Data/odex/data/nl2code/gpt-4-0613/gpt-4-0613-0-answers.jsonl" --model="gpt-4-0613-0" --answer=True --library="" --parallel=True --test="odex" """
-	""" Example usage: python validate_grammar.py --codetest="../Data/odex/data/nl2code/claude-3-opus-20240229/claude-3-opus-20240229-0-answers.jsonl" --model="claude-3-opus-20240229-0" --answer=True --library="" --parallel=True --test="odex" """
+	""" Example usage: python validate_grammar.py --codetest="../../Library-Bench/DS-1000/data/gpt-4-0613-0-answers.jsonl" --model="gpt-4-0613-0" --answer=True --library="Numpy" --parallel=False """
+	""" Example usage: python validate_grammar.py --codetest="../../Library-Bench/DS-1000/data/gpt-4-0613-0-answers.jsonl" --model="gpt-4-0613-0" --answer=True --library="" --parallel=True """
+	""" Example usage: python validate_grammar.py --codetest="../../Library-Bench/odex/data/nl2code/gpt-4-0613/gpt-4-0613-0-answers.jsonl" --model="gpt-4-0613-0" --answer=True --library="" --parallel=True --test="odex" """
+	""" Example usage: python validate_grammar.py --codetest="../../Library-Bench/odex/data/nl2code/claude-3-opus-20240229/claude-3-opus-20240229-0-answers.jsonl" --model="claude-3-opus-20240229-0" --answer=True --library="" --parallel=True --test="odex" """
 	
 	parser = argparse.ArgumentParser(description="Write grammar to constraint the inference of non-standalone code.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument("--codetest", help="File JSON containing the generated code.")
@@ -245,13 +331,12 @@ if __name__ == '__main__':
 	parser.add_argument("--parallel", help="Evaluation processing method.")
 	parser.add_argument("--split", help="Split lines by end of line. ")
 	parser.add_argument("--test", type=str, default="DS", 
-        choices=["DS", "odex"])
+        choices=["DS", "odex", "bigcodebench"])
 
 	args = parser.parse_args()
 	if eval(args.parallel):
 		evaluate_code_grammar(args.codetest, args.model, eval(args.answer), args.library, args.test, eval(args.split))
 	else:
 		sequential_evaluate(args.codetest, args.model, eval(args.answer), args.library, args.test, eval(args.split))
-
 
 

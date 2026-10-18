@@ -1,31 +1,90 @@
-*.csv
-error_analysis.ipynb
-Data/CoderEval/CoderEval-Input4Models/
-Data/CoderEval/experimental-results/
-Data/CoderEval/CoderEval-Input4Models.zip
-Data/CoderEval/CoderEval.tar
-Data/CoderEval/CoderEval4Java.json
-Data/CoderEval/CoderEval4Python.json
-Data/Own/
+# OS / editor / python noise
+.DS_Store
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+
+# Zipped artefacts (shared separately, e.g. as a release)
+libraries.zip
+gbnfs.zip
+LMH-ACL.zip
+table-explain.zip
+*.zip
+
+# Benchmarks live in the sibling ../Library-Bench repository
+Data/DS/
+Data/DS-1000/
 Data/odex/
+Data/bigcodebench/
+Data/CoderEval/
+Data/Own/
 Data/Prompts/
 Models/
-matplotlib.pyplot/
-pandas/
-scipy/
-sklearn/
-tensorflow/
-torch/
-CodeGenTest.ipynb
-errors_analysis.ipynb
-matplotlib
-numpy
-matplotlib.pyplot.txt
-pandas.txt
-scipy.txt
-sklearn.txt
-tensorflow.txt
-torch.txt
-unified_errors.ipynb
-Data/grap4code/output/modules_out
-*/run_codegen.py
+
+# Large generated outputs
+Data/graph4code/output/
+Data/graph4code/scripts/*_duration.txt
+Data/graph4code/scripts/requirement_*_missing.txt
+grammar/files/
+grammar/final/
+grammar/test/
+grammar/*.gbnf
+!grammar/atomimport.gbnf
+!grammar/atomexpr.gbnf
+!grammar/atomtest.gbnf
+!grammar/pandas.gbnf
+results/
+bigcodeannotation/
+table-explain/
+mypy/**/results/
+pyright/**/results/
+
+# Own Ollama fork lives upstream (see README)
+ollama/
+
+# Data files and results
+*.csv
+*.pkl
+*.npy
+*.png
+*.xlsx
+/DS_1000_validation_test.jsonl
+/odex_validation_test.jsonl
+/format_odex_validation_static.py
+/*_repair.jsonl
+ds1000_all_responses
+grammar_time_to_create*.txt
+
+# Generated static-analysis outputs and stubs
+mypy/*/out/
+mypy/*/out_old/
+pyright/*/typings/
+
+# Notebooks: only the selected analysis notebooks are tracked
+*.ipynb
+!inter-annotation/annotations_analysis.ipynb
+!groupsIFSbymodel.ipynb
+!groupsIFSbymodel-filter.ipynb
+!analysis_ds.ipynb
+!analysis_od.ipynb
+!analysis_bigcode.ipynb
+!analysis_ds-filter.ipynb
+!analysis_od-filter.ipynb
+!analysis_bigcode-filter.ipynb
+
+# Not part of the release
+interpretability/
+LMH-ACL/
+
+# Unused / duplicate helper scripts
+mypy/bigcodebench/prefix.sh
+/create_stub_bigcodebench.sh
+pyright/bigcodebench/create_stub_bigcodebench_final.sh
+
+# README staging copies
+copy-README.md
+
+# Static-analysis validation outputs and grammar input lists
+*validation.jsonl
+files/*.txt
+files/**/*.txt

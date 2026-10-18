@@ -12,8 +12,7 @@ from elasticsearch import Elasticsearch
 from sphinx.ext.napoleon import Config
 from sphinx.ext.napoleon import NumpyDocstring, GoogleDocstring
 import re
-
-
+import datetime
 
 """
 File that usese napolean to try and parse the different parts of a docstring, to structure 
@@ -82,16 +81,24 @@ def parse_rst(lines):
                 curr_param = new_param
             curr_par_doc = re.findall(':param [^:]*:(.*)', line)[0]
         elif line.startswith(':type '):
-            curr_type_param = re.findall(':type([^:]*):', line)[0]
-            curr_par_type = re.findall(':type [^:]*:(.*)', line)[0]
+            curr_type_param = re.findall(':type([^:]*):', line)
+            if len(curr_type_param) > 0:
+                curr_type_param = curr_type_param[0]
+            curr_par_type = re.findall(':type [^:]*:(.*)', line)
+            if len(curr_par_type) > 0:
+                curr_par_type = curr_par_type[0]
         elif line.startswith(':returns'):
             if curr_param:
                 param_to_doc[curr_param.strip()] = curr_par_doc
             if curr_type_param:
                 param_to_type[curr_type_param.strip()] = curr_par_type
-            return_doc = re.findall(':returns:(.*)', line)[0]
+            return_doc = re.findall(':returns:(.*)', line)
+            if len(return_doc) > 0:
+                return_doc = return_doc[0]
         elif line.startswith(':rtype'):
-            return_type = re.findall(':rtype:(.*)', line)[0]
+            return_type = re.findall(':rtype:(.*)', line)
+            if len(return_type) > 0:
+                return_type = return_type[0]
             break
         elif curr_par_doc:
                 curr_par_doc = curr_par_doc + '\n' + line
@@ -222,8 +229,8 @@ def extract_function(f, ret, name, clazz=None, mod=None):
                 ret['param_names'] = param_names
     except:
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        print("*** error: print_tb:")
-        traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
+        #print("*** error: print_tb:")
+        #traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
         pass
     if overall_doc is not None:
         if clazz:
@@ -295,9 +302,15 @@ def inspect_module_sub_package(module, mod, scoping_mod, all_classes, is_base = 
     #m = inspect.getmembers(module, inspect.isfunction)
     m = []
     for x_name, x in inspect.getmembers(module):
-        if x:
-            if "func" in str(x):
+        #print(x_name)
+        if 'flask_' in mod:
+            if x is not None and not x_name.startswith('_'):
                 m.append(tuple([x_name, x]))
+        else:
+            if x is not None:
+                if "func" in str(x):
+                    m.append(tuple([x_name, x]))
+        #print(m)
 
     for function in m:
         ret = {}
@@ -474,7 +487,7 @@ def write_json(ret_json, path, modname):
 def debug(ret_json):
     try:
         for r in ret_json:
-            print(r)
+            #print(r)
             json.dumps(r)
     except:
         raise RuntimeError("JSON is invalid")
@@ -533,7 +546,7 @@ def patch_types(all_classes):
             for res in res['hits']['hits']:
                 key = res['_source']['title']
                 if key not in method_descriptions:
-                    print('WARNING: key not found:' + key)
+                    #print('WARNING: key not found:' + key)
                     continue
                 desc = method_descriptions[key]
                 if 'param_name' in res['_source']:
@@ -561,7 +574,7 @@ def patch_types(all_classes):
 
 
 def main():
-
+    start_time = datetime.datetime.now()
     p = sys.argv[1]
     p = p.strip()
     path = os.path.join(sys.argv[2], p)
@@ -588,8 +601,8 @@ def main():
                     inspect_module_sub_package(module, p.strip(), modname, all_classes)
                 except:
                     exc_type, exc_value, exc_traceback = sys.exc_info()
-                    print("*** error: print_tb:")
-                    traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
+                    #print("*** error: print_tb:")
+                    #traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
                     pass
         else:
             # This is a builtin
@@ -600,8 +613,8 @@ def main():
                     inspect_module_sub_package(package, modname, modname, all_classes)
                 except:
                     exc_type, exc_value, exc_traceback = sys.exc_info()
-                    print("*** error: print_tb:")
-                    traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
+                    #print("*** error: print_tb:")
+                    #traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
                     pass
 
         #patch_types(all_classes)
@@ -609,11 +622,14 @@ def main():
             write_json(list(method_descriptions.values()), path, p)
 
     except ModuleNotFoundError:
-        print("failed to load module" + p)
+        #print("failed to load module" + p)
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        print("*** error: print_tb:")
-        traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
+        #print("*** error: print_tb:")
+        #traceback.print_tb(exc_traceback, limit=3, file=sys.stdout)
         pass
+
+    end_time = datetime.datetime.now()
+    print(f'Duration: {end_time-start_time}, module: {p}')
 
 
 if __name__ == "__main__":

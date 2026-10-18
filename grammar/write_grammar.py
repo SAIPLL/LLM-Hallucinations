@@ -14,28 +14,44 @@ def get_schema(url, alias, name):
 		schema = json.load(f)
 	return get_grammar(url=url, schema=schema, alias=alias, name=name)
 
+def negate_keywords(word, dct_negations):
+	"""
+		Add to the dictionary of negations 
+		the permutation of the word
+		Returns the updated dictionary
+	"""
+	for i in range(1, len(word) + 1):
+		l_rule = f'\"{word[:i-1]}\"'
+		r_rule = f'{word[i-1:i]}'
+		if l_rule not in dct_negations:
+			dct_negations[l_rule] = set(r_rule)
+		else:
+			dct_negations[l_rule] = dct_negations[l_rule].union(set(r_rule))
+	return dct_negations
+
 def negate_alias_name(alias="", name="", add_dot=False):
 	"""
 		Negates an alias correctly and adds these
 		rules to the connection rules
 	"""
 	words = alias + name
+	keywords = ["from ", "import "]
 	dct_negations = {}
+	# Negate alias and name
 	for w in words:
 		if add_dot:
 			alias_dot = w + "."
 		else: 
 			alias_dot = w
-		for i in range(1, len(alias_dot) + 1):
-			l_rule = f'\"{alias_dot[:i-1]}\"'
-			r_rule = f'{alias_dot[i-1:i]}'
-			if l_rule not in dct_negations:
-				dct_negations[l_rule] = set(r_rule)
-			else:
-				dct_negations[l_rule] = dct_negations[l_rule].union(set(r_rule))
+		dct_negations = negate_keywords(alias_dot, dct_negations)
+	# Negate reserved words to import modules
+	for k in keywords:
+		dct_negations = negate_keywords(k, dct_negations)
 	rule = "( "
 	if not add_dot:
 		dct_negations[f'""'] = dct_negations[f'""'].union(set([".","=",",","["," ","(",")","'","\"","{","}","+","-","&","*","@","/","%","^","|","<",">","#"]))
+	else:
+		dct_negations[f'""'] = dct_negations[f'""'].union(set([]))
 	for k,v in dct_negations.items():
 		rule += f'{k} [^{"".join(v)}] | '
 	rule = rule[:-3]
@@ -70,7 +86,7 @@ def read_file(file_name):
 	file.close()
 	return lines
 
-def run_write_schema(lst_function, alias, name, file_path, lst_filter, library_dict):
+def run_write_schema(lst_function, alias, name, file_path, lst_filter, library_dict, name_alias):
 	"""
 		Processes and writes the grammar into a file
 	"""
@@ -105,7 +121,7 @@ def run_write_schema(lst_function, alias, name, file_path, lst_filter, library_d
 		#print(f"Done ({i}): {lst_function[i]}")
 	
 	# Adds alias and name to beginning of rules
-	schema_global.format_lib()
+	schema_global.format_lib(name_alias)
 	# Pop rules from global_schema and adds them to dictionary
 	if 'lib-builtins' in schema_global._rules:
 		#if name != "tensorflow":
@@ -128,7 +144,7 @@ def run_write_schema(lst_function, alias, name, file_path, lst_filter, library_d
 	print(f"# Rules: {len(lst_function)}, Duration (s): {(end_time-start_time).total_seconds()}")
 	return library_dict
 
-def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',modules_list='question1.txt', alias=['pd'], name=['pandas'], namespace_filter=""):
+def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',modules_list='question1.txt', alias=['pd'], name=['pandas'], namespace_filter="", name_alias=False, rules_to_add=[]):
 	"""
 		lst_function: List[str] list of paths to functions in json format
 		baseline_grammar: file containing the base grammar from which to append the grammar
@@ -151,7 +167,7 @@ def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',module
 	# Dictionary to save all library connector rules
 	library_dict = {}
 	for i in range(0, len(alias)):
-		library_dict = run_write_schema(lst_files[i].strip(), alias[i], name[i], copy_file_path, lst_filters[i].strip(), library_dict)
+		library_dict = run_write_schema(lst_files[i].strip(), alias[i], name[i], copy_file_path, lst_filters[i].strip(), library_dict, name_alias)
 
 	with open(copy_file_path, 'a') as copy_file:
 		# Add connector rules to file
@@ -163,9 +179,13 @@ def save_gbnf_grammar_from_documentation(baseline_grammar='function.gbnf',module
 			c_rules.append(f"library ::= ( {'|'.join(library_rules)} ) \n")
 		else:
 			c_rules.append(f"library ::= ( {library_rules[0]} ) \n")
-		c_rules.append(f"root ::= ( {negate_alias_name(alias, name, add_dot=True)} | library )+ \n")
+		c_rules.append(f"root ::= ( {negate_alias_name(alias, name, add_dot=True)} | library | comment | import-stmt )+ \n")
 
 		copy_file.writelines(c_rules)
+
+		if len(rules_to_add) > 0:
+			for r in rules_to_add:
+				copy_file.writelines(f'{r}\n')
 
 # Define a custom argument type for a list of strings
 def list_of_strings(arg):
@@ -186,6 +206,7 @@ if __name__ == '__main__':
 	parser.add_argument("--alias-file", help="File containing the list of libraries aliases.") 
 	parser.add_argument("--name-file", help="File containing the list of libraries names.") 
 	parser.add_argument("--lst-namespace", help="File containing a list of modules to filter.")
+	parser.add_argument("--name-alias", help="Write name and alias in the library function rule.")
 
 	args = parser.parse_args()
 	if args.alias_file:
@@ -197,7 +218,7 @@ if __name__ == '__main__':
 	else:
 		name_lst = args.name
 
-	save_gbnf_grammar_from_documentation(args.baseline_grammar, args.lst_function, alias_lst, name_lst, args.lst_namespace)
+	save_gbnf_grammar_from_documentation(args.baseline_grammar, args.lst_function, alias_lst, name_lst, args.lst_namespace, eval(args.name_alias))
 
 	#save_gbnf_grammar_from_documentation("any.gbnf", "numpy.txt", ['np'], ["numpy"])
 

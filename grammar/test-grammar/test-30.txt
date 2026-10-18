@@ -1,0 +1,7 @@
+import pandas as pd
+import numpy as np
+import numpy
+from pandas import DataFrame
+
+x = pandas.DataFrame([])
+x = pandas.Data([])

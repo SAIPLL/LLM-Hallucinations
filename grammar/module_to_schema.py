@@ -3,6 +3,7 @@ import json
 import os
 import re
 import pandas as pd
+import time
 
 
 def return_types(type_str):
@@ -349,29 +350,30 @@ def build_init(module, data, kwargs):
     function_set = set()
     builtin_set = set()
     for function in data:
-        if "klass" in function and "function" in function:
+        if "klass" in function and ("function" in function or "class_docstring" in function):
             if function["module"]:
                 submodule = function["module"]
             else:
                 submodule = "NA"
             if function["klass"] not in function_set or function["klass"] not in builtin_set:
                 # Constructors and attributes, without private functions
-                if (function["function"] == "__init__" or function["function"] == "__builtins__") and '._' not in function["klass"]:
-                    if not function["klass"].startswith('_'):
-                        function["klass"] = function["klass"].replace("enum ", "")
-                        function_rule = function["klass"].replace('.', '-')
-                        function_rule = function["klass"].replace('_', '-')
-                        path_to_function = f"{module}/{function_rule}"
-                        os.makedirs(path_to_function, exist_ok=True)
-                        if function["function"] == "__init__":
-                            function_set.add(function["klass"])
-                            build_json(path_to_function, "__init__", function, function_rule, kwargs, module)
-                            add_property_module(module, function["klass"])
-                        elif function["function"] == "__builtins__":
-                            if function_rule not in function_set:
-                                builtin_set.add(function["klass"])
-                            build_json(path_to_function, "__builtins__", function, function_rule, kwargs, module)
-                            add_property_module(module, function["klass"], "__builtins__")
+                if function["klass"] is not None:
+                    if '._' not in function["klass"] and ("function" in function or "class_docstring" in function):
+                        if not function["klass"].startswith('_'):
+                            function["klass"] = function["klass"].replace("enum ", "")
+                            function_rule = function["klass"].replace('.', '-')
+                            function_rule = function["klass"].replace('_', '-')
+                            path_to_function = f"{module}/{function_rule}"
+                            os.makedirs(path_to_function, exist_ok=True)
+                            if "function" in function and function["function"] == "__init__":
+                                function_set.add(function["klass"])
+                                build_json(path_to_function, "__init__", function, function_rule, kwargs, module)
+                                add_property_module(module, function["klass"])
+                            elif ("function" in function and  function["function"] == "__builtins__") or ("class_docstring" in function):
+                                if function_rule not in function_set:
+                                    builtin_set.add(function["klass"])
+                                build_json(path_to_function, "__builtins__", function, function_rule, kwargs, module)
+                                add_property_module(module, function["klass"], "__builtins__")
 
     # Iterate through the list to find non-private functions from the constructors above
     for function in data:
@@ -422,6 +424,8 @@ def convert_data_to_schema(module, file_path, kwargs, starts=True):
         module: name of the module to transform
     """
 
+    time_start = time.time()
+
     # Create folder for the module
     os.makedirs(module, exist_ok=True)
 
@@ -451,6 +455,9 @@ def convert_data_to_schema(module, file_path, kwargs, starts=True):
     with open(global_file_path, 'w') as file_two:
         file_two.write(f"{module}/{module}.txt" + '\n')
 
+    time_end = time.time()
+    return time_end - time_start
+
 if __name__ == "__main__":
     """ Execute modules' jsons into schema """
     """ Example usage: python grammar/module_to_schema.py --module='pandas' --file='pandas.json' --kwargs=False"""
@@ -462,4 +469,6 @@ if __name__ == "__main__":
     parser.add_argument("--starts", help="Only add files that start with the same name as the module.")
 
     args = parser.parse_args()
-    convert_data_to_schema(args.module, args.file, eval(args.kwargs), eval(args.starts))
+
+    schema_time = convert_data_to_schema(args.module, args.file, eval(args.kwargs), eval(args.starts))
+    print(f'Duration: {schema_time}, module: {module}')

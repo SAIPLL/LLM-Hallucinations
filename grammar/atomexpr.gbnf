@@ -1,4 +1,4 @@
-op-expr ::= ortest
+op-expr ::= ortest | "(" ortest ")"
 
 ortest ::= andtest (space "or" space andtest)*
 andtest ::= nottest (space "and" space nottest)*
@@ -15,10 +15,11 @@ term ::= factor ( space ( "*" | "@" | "/" | "%" | "//" ) space factor)*
 factor ::= ( "+" | "-" | "~" ) factor | power
 power ::= value (space "**" space factor)?
 
-name ::= [a-zA-Z_] [a-zA-Z_0-9]*
+name ::= class | subscript-name
+name-l ::= [a-zA-Z_] [a-zA-Z_0-9]*
 array ::= "[" space ( op-expr (","? space op-expr)* )? "]" space
 bool ::= ("True" | "False") space
-char ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+char ::= [^"\\'] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
 decimal-part ::= [0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
 integral-part ::= [0-9] | [1-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
 integer ::= ("-"? integral-part) space
@@ -28,13 +29,17 @@ quote ::= ( "'" | "\"" )
 number ::= ("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)? space
 object ::= "{" space ( string ":" space op-expr (","? space string ":" space op-expr)* )? "}" space
 space ::= ( [ \t\n]* )
-subscript-name ::= [a-zA-Z_] [a-zA-Z_0-9]* (trailer-wd)*
-string ::= quote char* quote space
-class ::= class-name (trailer)*
-trailer-wd ::= "[" subscriptlist "]" | "(" subscriptlist ? ")"
-trailer ::= "[" subscriptlist "]" | "." name | "(" subscriptlist ? ")"
+subscript-name ::= name-l (trailer-wd)*
+string ::= quote char* quote library-trailer* space
+library-trailer ::= ( "." ( name-l "(" func-subscriptlist? ")" |  name-l ) )
+class ::= class-name (trailer)+
+trailer-wd ::= "[" subscriptlist "]" | "(" func-subscriptlist ? ")"
+trailer ::= "[" subscriptlist "]" | ("." name-l)+ | "(" func-subscriptlist ? ")"
 subscriptlist ::= op-expr (","? space op-expr )*
+func-subscriptlist ::= (name-l space "=" space)? op-expr ( "," (name-l space "=" space)? space op-expr )*
 tuple ::= "(" op-expr  ","? space op-expr ")"
 value ::= ( object | array | string | number | bool | null | none | library more-space | class | tuple | ":" | "::" | subscript-name ) space
 kwargs ::= op-expr
-more-space ::= ( " " | "\n" | "," | "\t" | ")" | "]" | "[" subscriptlist "]" )
+valid-ops ::= ( "+" | "-" | "<<" | ">>" | "&" | "*" | "@" | "/" | "%" | "//" | "^" | "|" | "<" | ">" | "==" | ">=" | "<=" | "<>" | "!=")
+more-space ::= ( " " | "\n" | "," | "\t" | ")" | "]" | "[" subscriptlist "]" | "#" | valid-ops )
+endmarker ::= ""

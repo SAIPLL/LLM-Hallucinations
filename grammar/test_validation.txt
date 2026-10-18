@@ -1,0 +1,5 @@
+
+    y_pred = softmax_output.cpu().detach().numpy()
+    idx = np.argmax(y_pred, axis=1)
+    df = pd.DataFrame(data={'idx': idx})
+    return torch.tensor(df['idx'].values).type(torch.LongTensor)

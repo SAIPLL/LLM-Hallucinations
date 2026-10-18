@@ -1,0 +1,8 @@
+{
+  "pythonVersion": "3.10.14",
+  "venvPath": "/opt/homebrew/anaconda3/envs",  // Path to all Anaconda environments
+  "venv": "odex2.0",                         // Name of your environment
+  "reportMissingImports": true,            // Enable warnings for missing imports
+  "reportRedeclaration": false,            
+  "typeCheckingMode": "standard"           // Type checking mode: 'off', 'basic', or 'strict'
+}

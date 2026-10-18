@@ -1,0 +1,19 @@
+import pandas as pd
+from sklearn.metrics import r2_score
+
+min_r2 = 1.0
+min_df = None
+min_shifts = 0
+
+for i in range(len(df)):
+    shifted_col1 = df['#1'].shift(i)
+    r2 = r2_score(shifted_col1, df['#2'])
+    if r2 < min_r2:
+        min_r2 = r2
+        min_df = df.copy()
+        min_df['#1'] = shifted_col1
+        min_shifts = i
+
+print(f"Minimum R^2 value: {min_r2:.4f}")        
+print(f"Number of shifts: {min_shifts}")
+df = min_df

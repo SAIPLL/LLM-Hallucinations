@@ -1,0 +1,5 @@
+result = pd.DataFrame(
+    np.sort(df.values, axis=1)[:, ::-1],
+    columns=df.columns,
+    index=df.index
+).fillna(df.values)

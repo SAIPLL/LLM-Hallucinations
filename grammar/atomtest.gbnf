@@ -71,6 +71,7 @@ name-argument ::= name (space "=" space test)?
 
 kwargs ::= op-expr
 valid-ops ::= ( "+" | "-" | "&" | "*" | "@" | "/" | "%" | "^" | "|" | "<" | ">" | "!")
-more-space ::= ( " " | "\n" | "," | "\t" | ")" | "]" | "#" | valid-ops )
+more-space ::= ( " " | "\n" | "," | "\t" | ")" | "]" | "'" | "}" | comment | valid-ops )
 space ::= ( [ \t\n]* )
 endmarker ::= ""
+comment ::= "#" space ( char | string )* "\n"

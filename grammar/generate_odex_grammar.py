@@ -1,6 +1,6 @@
 """
-  This script generates a .sh file to create grammars 
-  for odex, as well as the files for the lst-function parameter
+  This is script that generates the grammars 
+  for odex.
 """
 
 import os
@@ -64,7 +64,7 @@ def create_filter_doc(lib_lst, task_id, folder_name, lang):
 
 def main():
   lib_alias = dict()
-  test_path = "Data/odex/data"
+  test_path = "../Library-Bench/odex/data"
   library_save = "Data/graph4code/output/odex"
   folder_name = 'files/odex'
   for filename in os.listdir(test_path):
@@ -78,6 +78,8 @@ def main():
             # Load each line as a JSON object
             task_info = json.loads(line.strip())
             par_lib = []
+            if "test_start" not in task_info:
+              continue
             if "import " not in task_info["test_start"]:
               continue 
             # Get library needed
@@ -104,11 +106,11 @@ def main():
               current_directory = os.getcwd()
               # Create the full path of the folder
               folder_path = os.path.join(current_directory, library_task[i])
-              #if not os.path.isdir(folder_path):
-                #try:
-                  #convert_data_to_schema(library_task[i], f"{library_save}/{library_task[i]}/{library_task[i]}.json", True)
-                #except:
-                  #convert_data_to_schema(library_task[i].replace('_','-'), f"{library_save.replace('_','-')}/{library_task[i].replace('_','-')}/{library_task[i].replace('_','-')}.json", True)
+              if not os.path.isdir(folder_path):
+                try:
+                  convert_data_to_schema(library_task[i], f"{library_save}/{library_task[i]}/{library_task[i]}.json", True)
+                except:
+                  convert_data_to_schema(library_task[i].replace('_','-'), f"{library_save.replace('_','-')}/{library_task[i].replace('_','-')}/{library_task[i].replace('_','-')}.json", True)
             # Get task_id to save the grammar for this question
             task_id = task_info["task_id"]
             library_task = [lib.replace('_','-') for lib in library_task]
@@ -120,10 +122,10 @@ def main():
             alias_lst = [a if a != "matplotlib.pyplot" else "plt" for a in alias_lst]
             alias_lst = [a if a != "aspose.words" else "aw" for a in alias_lst]
             # Create lst_namespace
-            #if "mpl-toolkits" in library_task:
+            #if "sympy" in library_task:
             file_filter = create_filter_doc(library_task, task_id, folder_name, filename[:2])
-            #if "mpl-toolkits" in library_task:
-            save_gbnf_grammar_from_documentation('grammar/reorder.gbnf', file_lib, alias_lst, library_task, file_filter)
+            #if "sympy" in library_task:
+            save_gbnf_grammar_from_documentation('grammar/atomimport.gbnf', file_lib, alias_lst, library_task, file_filter)
 
 if __name__ == '__main__':
   main()

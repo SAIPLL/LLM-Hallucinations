@@ -549,11 +549,11 @@ class SchemaConverter:
                 rule += ' ")" )?'
             else:
                 rule = f"\"{built_rule}\" "
-                # Get built-in function calls
-                rule_builtins = self._add_rule(
-                    f'lib-builtins',
-                    name.replace(' ', '-').replace('.','-')
-                )
+            # Get built-in function calls
+            rule_builtins = self._add_rule(
+                f'lib-builtins',
+                name.replace(' ', '-').replace('.','-')
+            )
             return rule
 
         methods = [f"{name}-{e}" for e in elements_with_ref] + [name, "\n"]
@@ -587,7 +587,7 @@ class SchemaConverter:
                 prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{prop_name}')
                 if prop_name not in elements_with_ref:
                     prop_kv_rule_names[prop_name] = self._add_rule(
-                        f'{name}{"-" if name else ""}{prop_name}-kv',
+                        f'{name}{"-" if name else ""}{prop_name}-acmp',
                         f'({json.dumps(prop_name)} space "=" space)? ( {prop_rule_name} | name )'
                     )
                     #rule_in_case = self._add_rule(prop_rule_name, "value" )
@@ -600,7 +600,7 @@ class SchemaConverter:
             sub_name = f'{name}{"-" if name else ""}additional'
             value_rule = self.visit({} if additional_properties == True else additional_properties, f'{sub_name}-value')
             prop_kv_rule_names["*"] = self._add_rule(
-                f'{sub_name}-kv',
+                f'{sub_name}-acmp',
                 self._add_primitive('string', PRIMITIVE_RULES['string']) + f' "=" space ( {value_rule} | name )'
             )
             optional_props.append("*")
@@ -631,7 +631,7 @@ class SchemaConverter:
                         kv_rule_name = prop_kv_rule_names[k]
                         if k == '*':
                             res = self._add_rule(
-                                f'{name}{"-" if name else ""}additional-kvs',
+                                f'{name}{"-" if name else ""}additional-acmps',
                                 f'{kv_rule_name} ( "," space ' + kv_rule_name + ' )*'
                             )
                         elif first_is_optional:
@@ -642,22 +642,22 @@ class SchemaConverter:
                         if len(rest) > 0:
                             res += ' ' + self._add_rule(
                                 f'{name}{"-" if name else ""}{k}-rest',
-                                get_recursive_refs(rest, left, first_is_optional=True) + f' | ( {kv_rule_name.replace("-kv","")}-left )?'
+                                get_recursive_refs(rest, left, first_is_optional=True) + f' | ( {kv_rule_name.replace("-acmp","")}-left )?'
                             )
                             
                             l_rule = []
                             for j in range(0, len(left)):
                                 rule_name_left = prop_kv_rule_names[left[j]]
                                 #print(rule_name_left)
-                                l_rule.append(f'{rule_name_left.replace("-kv","")}-kv {rule_name_left.replace("-kv","")}-rest')
+                                l_rule.append(f'{rule_name_left.replace("-acmp","")}-acmp {rule_name_left.replace("-acmp","")}-rest')
                             if len(l_rule) > 0:
                                 self._add_rule(
-                                    f'{kv_rule_name.replace("-kv","")}-left',
+                                    f'{kv_rule_name.replace("-acmp","")}-left',
                                     f'"," space ( {" | ".join(l_rule)} )'
                                 )
                             else:
                                 self._add_rule(
-                                    f'{kv_rule_name.replace("-kv","")}-left',
+                                    f'{kv_rule_name.replace("-acmp","")}-left',
                                     f'endmarker'
                                 )
 
@@ -670,18 +670,18 @@ class SchemaConverter:
 
                     # Add last element
                     rule_name_left = prop_kv_rule_names[optional_props[-1]]
-                    rule += f' {rule_name_left.replace("-kv","")}-rest'
+                    rule += f' {rule_name_left.replace("-acmp","")}-rest'
                     self._add_rule(
-                        f'{rule_name_left.replace("-kv","")}-rest',
-                        f' | ( {rule_name_left.replace("-kv","")}-left )?'
+                        f'{rule_name_left.replace("-acmp","")}-rest',
+                        f' | ( {rule_name_left.replace("-acmp","")}-left )?'
                     )
                     l_rule = []
                     for j in range(0, len(optional_props[:-1])):
                         rl = prop_kv_rule_names[optional_props[j]]
-                        l_rule.append(f'{rl.replace("-kv","")}-kv {rl.replace("-kv","")}-rest')
+                        l_rule.append(f'{rl.replace("-acmp","")}-acmp {rl.replace("-acmp","")}-rest')
 
                     self._add_rule(
-                        f'{rule_name_left.replace("-kv","")}-left',
+                        f'{rule_name_left.replace("-acmp","")}-left',
                         f'"," space ( {" | ".join(l_rule)} )'
                     )
 
@@ -823,36 +823,51 @@ class SchemaConverter:
             rules_i = list(set(rules_i) - set(rules_b))
             self._rules['lib-inits'] = f"{' | '.join(rules_i)}"
 
-    def format_lib(self):
+    def format_lib(self, use_name_alias):
         # Modify libmethods to work with alias of library
         rule_name = self.name.replace('.','-')
         const_rule = f"{self.alias}-{rule_name}-const"
         attr_rule = f"{self.alias}-{rule_name}-attrs"
-        func_rule = f"{self.alias}-{rule_name}-funcs"
         self.clean_inits('lib-inits')
         self.clean_inits('lib-builtins')
-        #if "lib-inits" in self._rules and const_rule in self._rules and func_rule in self._rules:
-        if "lib-inits" in self._rules and const_rule in self._rules:
-            if const_rule != "":
-                #self._rules[f"lib-inits"] = f"\"{self.alias}.\" ( {self._rules['lib-inits']} | {const_rule} | {func_rule} )"
-                self._rules[f"lib-inits"] = f"\"{self.alias}.\" ( {self._rules['lib-inits']} | {const_rule} )"
 
-        if "lib-inits" in self._rules and const_rule not in self._rules:
-            self._rules[f"lib-inits"] =  f"\"{self.alias}.\" ( {self._rules['lib-inits']} )"
-        if "lib-inits" not in self._rules and const_rule in self._rules:
-            self._rules[f"lib-inits"] = f"\"{self.alias}.\" ( {const_rule} )"
-        if "lib-inits" not in self._rules and const_rule not in self._rules:
-            self._rules[f"lib-inits"] = ""
+        if use_name_alias:
+            rule = f" ( \"{self.alias}.\" |  \"{self.name}.\" ) ("
+            if "lib-inits" in self._rules:
+                rule += f" {self._rules['lib-inits']} "
+                if const_rule in self._rules:
+                    if const_rule != "":
+                        rule +=  f"| {const_rule} "
+            if "lib-builtins" in self._rules:
+                rule += f"| {self._rules['lib-builtins']} "
+                if attr_rule in self._rules:
+                    if attr_rule != "":
+                        rule +=  f"| {attr_rule} "
+            rule += ")"
+            self._rules[f"lib-inits"] = rule
+            if "lib-builtins" in self._rules:
+                del self._rules[f"lib-builtins"]
+        else:
+            if "lib-inits" in self._rules and const_rule in self._rules:
+                if const_rule != "":
+                    self._rules[f"lib-inits"] = f"\"{self.alias}.\" ( {self._rules['lib-inits']} | {const_rule} )"
 
-        if "lib-builtins" in self._rules and attr_rule in self._rules:
-            if attr_rule != "":
-                self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} | {attr_rule} )"
-        if "lib-builtins" in self._rules and attr_rule not in self._rules:
-            self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} )"
-        if "lib-builtins" not in self._rules and attr_rule in self._rules:
-            self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {attr_rule} )"
-        if "lib-builtins" not in self._rules and attr_rule not in self._rules:
-            self._rules[f"lib-builtins"] = ""
+            if "lib-inits" in self._rules and const_rule not in self._rules:
+                self._rules[f"lib-inits"] =  f"\"{self.alias}.\" ( {self._rules['lib-inits']} )"
+            if "lib-inits" not in self._rules and const_rule in self._rules:
+                self._rules[f"lib-inits"] = f"\"{self.alias}.\" ( {const_rule} )"
+            if "lib-inits" not in self._rules and const_rule not in self._rules:
+                self._rules[f"lib-inits"] = ""
+
+            if "lib-builtins" in self._rules and attr_rule in self._rules:
+                if attr_rule != "":
+                    self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} | {attr_rule} )"
+            if "lib-builtins" in self._rules and attr_rule not in self._rules:
+                self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {self._rules['lib-builtins']} )"
+            if "lib-builtins" not in self._rules and attr_rule in self._rules:
+                self._rules[f"lib-builtins"] = f"\"{self.name}.\" ( {attr_rule} )"
+            if "lib-builtins" not in self._rules and attr_rule not in self._rules:
+                self._rules[f"lib-builtins"] = ""
 
 def get_grammar(prop_order=[], allow_fetch=False, dotall=False, raw_pattern=False, url="", schema="", alias="", name=""):
     converter = SchemaConverter(

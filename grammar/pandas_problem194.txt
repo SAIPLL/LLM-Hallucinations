@@ -1,0 +1,1 @@
+result = pd.pivot_table(df, values=['D','E'], rows=['B'], aggfunc=[np.max, np.min])

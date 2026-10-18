@@ -1,0 +1,30 @@
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+def task_func(url: str, csv_file_path: str) -> list:
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(f"Error fetching URL: {str(e)}")
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    containers = soup.find_all('div', class_='container')
+
+    data = []
+    for container in containers:
+        title = container.find('h1')
+        title = title.text.strip() if title else 'No Title'
+
+        date = container.find('span', class_='date')
+        date = date.text.strip() if date else 'No Date'
+
+        author = container.find('span', class_='author')
+        author = author.text.strip() if author else 'No Author'
+
+        data.append((title, date, author))
+
+    df = pd.DataFrame(data, columns=['Title', 'Date', 'Author'])
+    df.to_csv(csv_file_path, index=False)
+
+    return data

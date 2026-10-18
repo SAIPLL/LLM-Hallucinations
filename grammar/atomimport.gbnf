@@ -1,0 +1,95 @@
+op-expr ::= ortest
+ortest ::= andtest (space "or" space andtest)*
+andtest ::= nottest (space "and" space nottest)*
+nottest ::= (space "not" space nottest | comparison )
+comparison ::= expr (space compop space expr)*
+compop ::= ( "<" | ">" | "==" | ">=" | "<=" | "<>" | "!=" | "in" | " not in " | " is " | " is not " )
+expr ::= xorexpr ( space "|" space xorexpr)*
+xorexpr ::= andexpr (space "^" space andexpr)*
+andexpr ::= shiftexpr (space "&" space shiftexpr)*
+shiftexpr ::= arithexpr ( space ( "<<" | ">>" ) space arithexpr)*
+arithexpr ::= term ( space ( "+" | "-" ) space term)*
+term ::= factor ( space ( "*" | "@" | "/" | "%" | "//" ) space factor)*
+factor ::= ( "+" | "-" | "~" ) factor | power
+power ::= atom-expr (space "**" space factor)?
+
+starexpr ::= "*" expr
+
+atom-expr ::= ("await" space)? ( space ( value trailer* | library | name trailer-func* | class-name trailer+ ) space )
+
+trailer ::= ( "(" arglist? ")" | "[" subscriptlist "]" | "." name )
+
+trailer-func ::= ( "(" arglist? ")" | "[" subscriptlist "]" )
+
+value ::= ( tuple | array | object | number | string | "..." | "None" | bool | "null" | "f" string ) space
+
+name ::= [a-zA-Z_] [a-zA-Z_0-9]*
+
+bool ::= ( "True" | "False" )
+
+quote ::= ( "'" | "\"" )
+string ::= quote char* quote
+char ::= [^"\\'] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+
+number ::= ("-"? integral-part) ("." decimal-part)? ([eE] [-+]? integral-part)?
+decimal-part ::= [0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integral-part ::= [0-9] | [1-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9] ([0-9])?)?)?)?)?)?)?)?)?)?)?)?)?)?)?
+integer ::= ("-"? integral-part) space
+
+object ::= "{" space dictorsetmaker? space "}"
+
+array ::= "[" space testlist-comp? space "]"
+
+tuple ::= "(" space testlist-comp? space ")"
+
+dictorsetmaker ::= ( ( kvpair-double ( comp-for | ( ( "," space kvpair-double)* space ","? space ) ) ) | testlist-comp )
+
+kvpair-double ::= ( ( test space ":" space test ) | "**" expr )
+
+testlist-comp ::= ( test | starexpr ) ( comp-for | ("," space (test | starexpr) )* ("," space)? )
+comp-iter ::= ( comp-for | comp-if )
+comp-if ::= "if" space ortest
+comp-for ::= ("async" space)? "for" space exprlist space "in" space ortest ( space comp-iter )*
+exprlist ::= ( expr | starexpr ) ( "," space ( expr | starexpr ) )* ( "," space )?
+
+varargslist ::= ( varname | starmandatory | doublestartuple )
+
+varname ::= name-argument ("," space name-argument)* ( "," space ( starmandatory | doublestartuple )? )?
+
+varargskwargs ::= ("," space doublestartuple?)?
+doublestartuple ::= "**" name ","?
+starmandatory ::= "*" name? ( "," space name-argument )* varargskwargs
+
+test ::= ( ortest ("if" ortest "else" test)? | lambdef )
+lambdef ::= "lambda" varargslist? space ":" space test
+
+arglist ::= argument ("," space argument)* ( "," space )?
+argument ::= ( test comp-for? | name-argument | "**" test | "*" test )
+subscriptlist ::= subscriptt ("," space subscriptt)* ","?
+subscriptt ::= ( test | ":" test? )*
+name-argument ::= name (space "=" space test)?
+
+kwargs ::= op-expr
+
+import-stmt ::= ( import-name | import-from )
+import-from ::= "from " ( ( "." | "...")* dotted-name | ( "." | "...")+ ) " import " import-from-rule "\n"
+import-from-rule ::= ( "*" | "(" space import-as-names space ")" | import-as-names )
+import-as-names ::= import-as-name ( space "," space import-as-name)* ","?
+import-as-name ::= name ( " as " name)?
+
+import-name ::= "import " dotted-as-names "\n"
+dotted-as-names ::= dotted-name (" as " name)?
+dotted-name ::= ( python-modules | environment-modules )
+python-modules ::= ( "abc" | "aifc" | "argparse" | "array" | "ast" | "asynchat" | "asyncio" | "asyncore" | "atexit" | "audioop" | "base64" | "bdb" | "binascii" | "bisect" | "builtins" | "bz2" | "calendar" | "cgi" | "cgitb" | "chunk" | "cmath" | "cmd" | "code" | "codecs" | "codeop" | "collections" | "colorsys" | "compileall" | "concurrent" | "configparser" | "contextlib" | "contextvars" | "copy" | "copyreg" | "cProfile" | "crypt" | "csv" | "ctypes" | "curses" | "dataclasses" | "datetime" | "dbm" | "decimal" | "difflib" | "dis" | "distutils" | "doctest" | "email" | "ensurepip" | "enum" | "errno" | "faulthandler" | "fcntl" | "filecmp" | "fileinput" | "fnmatch" | "fractions" | "ftplib" | "functools" | "gc" | "getopt" | "getpass" | "gettext" | "glob" | "graphlib" | "grp" | "gzip" | "hashlib" | "heapq" | "hmac" | "html" | "http" | "idlelib" | "imaplib" | "imghdr" | "imp" | "importlib" | "inspect" | "io" | "ipaddress" | "itertools" | "json" | "keyword" | "linecache" | "locale" | "logging" | "lzma" | "mailbox" | "mailcap" | "marshal" | "math" | "mimetypes" | "mmap" | "modulefinder" | "msilib" | "msvcrt" | "multiprocessing" | "netrc" | "nis" | "nntplib" | "numbers" | "operator" | "optparse" | "os" | "ossaudiodev" | "pathlib" | "pdb" | "pickle" | "pickletools" | "pipes" | "pkgutil" | "platform" | "plistlib" | "poplib" | "posix" | "pprint" | "profile" | "pstats" | "pty" | "pwd" | "py_compile" | "pyclbr" | "pydoc" | "queue" | "quopri" | "random" | "re" | "readline" | "reprlib" | "resource" | "rlcompleter" | "runpy" | "sched" | "secrets" | "select" | "selectors" | "shelve" | "shlex" | "shutil" | "signal" | "site" | "sitecustomize" | "smtpd" | "smtplib" | "sndhdr" | "socket" | "socketserver" | "spwd" | "sqlite3" | "ssl" | "stat" | "statistics" | "string" | "stringprep" | "struct" | "subprocess" | "sunau" | "symtable" | "sys" | "sysconfig" | "syslog" | "tabnanny" | "tarfile" | "telnetlib" | "tempfile" | "termios" | "test" | "textwrap" | "threading" | "time" | "timeit" | "tkinter" | "token" | "tokenize" | "tomllib" | "trace" | "traceback" | "tracemalloc" | "tty" | "turtle" | "turtledemo" | "types" | "typing" | "unicodedata" | "unittest" | "urllib" | "usercustomize" | "uu" | "uuid" | "venv" | "warnings" | "wave" | "weakref" | "webbrowser" | "winreg" | "winsound" | "wsgiref" | "xdrlib" | "xml" | "xmlrpc" | "zipapp" | "zipfile" | "zipimport" | "zlib" | "zoneinfo" ) ( "." name )*
+
+environment-modules ::= ( "numpy" | "torch" | "tensorflow" | "matplotlib" | "sklearn" | "scipy" | "pandas" ) ( "." name )*
+
+environment-modules ::= ( "aspose" | "random" | "pytz" | "obspy" | "sys" | "bisect" | "datetime" | "selenium" | "subprocess" | "pickle" | "heapq" | "multidict" | "mpl_toolkits" | "requests" | "texttable" | "numpy" | "matplotlib" | "cv2" | "urllib" | "base64" | "ast" | "struct" | "ssl" | "django" | "math" | "socket" | "ctypes" | "collections" | "hashlib" | "dateutil" | "codecs" | "PIL" | "sqlalchemy" | "shutil" | "ftplib" | "csv" | "bs4" | "os" | "warnings" | "pprint" | "difflib" | "re" | "functools" | "tensorflow" | "configparser" | "itertools" | "IPython" | "mechanize" | "sympy" | "sqlite3" | "rsa" | "sklearn" | "seaborn" | "xlrd" | "scipy" | "unicodedata" | "statistics" | "xlwt" | "inspect" | "filecmp" | "builtins" | "time" | "pandas" | "cgi" | "glob" | "io" | "imp" | "xml" | "string" | "json" | "docxtpl" | "flask" | "operator" | "lxml" | "locale" | "queue" | "http" | "argparse" | "regex" ) ( "." name )*
+
+environment-modules ::= ( "chardet" | "seaborn" | "hashlib" | "shutil" | "time" | "cgi" | "secrets" | "holidays" | "heapq" | "uuid" | "subprocess" | "psutil" | "shlex" | "python_http_client" | "struct" | "werkzeug" | "binascii" | "typing" | "sendgrid" | "gensim" | "unicodedata" | "tensorflow" | "cv2" | "configparser" | "PIL" | "mpl_toolkits" | "http" | "natsort" | "mimetypes" | "keras" | "decimal" | "calendar" | "yaml" | "glob" | "socket" | "types" | "tarfile" | "random" | "wtforms" | "prettytable" | "turtle" | "csv" | "wordninja" | "re" | "flask_login" | "ftplib" | "zipfile" | "codecs" | "docx" | "soundfile" | "os" | "lxml" | "textblob" | "mechanize" | "importlib" | "flask_mail" | "rsa" | "folium" | "Crypto" | "multiprocessing" | "scipy" | "queue" | "wordcloud" | "faker" | "json" | "sympy" | "numpy" | "xmltodict" | "pytesseract" | "flask" | "operator" | "pickle" | "skimage" | "flask_wtf" | "shapely" | "collections" | "cmath" | "platform" | "statsmodels" | "geopandas" | "django" | "signal" | "array" | "regex" | "warnings" | "bs4" | "textwrap" | "base64" | "bisect" | "statistics" | "ctypes" | "ssl" | "geopy" | "threading" | "sqlite3" | "urllib" | "dateutil" | "pathlib" | "pkgutil" | "itertools" | "blake3" | "matplotlib" | "requests" | "nltk" | "functools" | "html" | "getpass" | "select" | "ast" | "flask_restful" | "sys" | "math" | "inspect" | "texttable" | "pytz" | "zlib" | "hmac" | "gzip" | "pandas" | "smtplib" | "email" | "difflib" | "librosa" | "openpyxl" | "xlwt" | "ipaddress" | "Levenshtein" | "io" | "pyquery" | "fnmatch" | "logging" | "enum" | "datetime" | "cryptography" | "string" | "xml" | "sklearn" | "errno" | "wikipedia" ) ( "." name )*
+
+valid-ops ::= ( "+" | "-" | "&" | "*" | "@" | "/" | "%" | "^" | "|" | "<" | ">" | "!" | ":")
+more-space ::= ( " " | "\n" | "," | "\t" | ")" | "]" | "'" | "}" | comment | valid-ops )
+space ::= ( [ \t\n]* )
+endmarker ::= ""
+comment ::= "#" space ( char | string )* "\n"
