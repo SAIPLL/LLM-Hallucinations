@@ -80,3 +80,6 @@ copy-README.md
 *validation.jsonl
 files/*.txt
 files/**/*.txt
+
+# Released annotations
+!inter-annotation/annotations/*.csv
