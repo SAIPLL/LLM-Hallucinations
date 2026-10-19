@@ -62,15 +62,7 @@ pyright/*/typings/
 
 # Notebooks: only the selected analysis notebooks are tracked
 *.ipynb
-!inter-annotation/annotations_analysis.ipynb
-!groupsIFSbymodel.ipynb
-!groupsIFSbymodel-filter.ipynb
-!analysis_ds.ipynb
-!analysis_od.ipynb
-!analysis_bigcode.ipynb
-!analysis_ds-filter.ipynb
-!analysis_od-filter.ipynb
-!analysis_bigcode-filter.ipynb
+!paper-analysis/*.ipynb
 
 # Not part of the release
 interpretability/
